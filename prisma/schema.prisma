@@ -1,0 +1,207 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  STUDENT
+  LIBRARIAN
+  ADMIN
+}
+
+model User {
+  id           String  @id
+  email        String  @unique
+  fullName     String?
+  studentId    String? @unique
+  faculty      String?
+  academicYear String?
+
+  role Role @default(STUDENT)
+
+  noShowCount Int       @default(0)
+  bannedUntil DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  documentsUploaded  Document[]          @relation("UserUploadedDocs")
+  auditLogsActions   DocumentAuditLog[]  @relation("ActorAuditLogs")
+  complaintsCreated  DocumentComplaint[] @relation("ComplaintCreator")
+  complaintsResolved DocumentComplaint[] @relation("ComplaintResolver")
+  roomBookings       RoomBooking[]
+
+  @@index([studentId])
+  @@map("users")
+}
+
+enum DocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  UNDER_REVIEW
+  REMOVED
+}
+
+enum CopyrightType {
+  SELF_CREATED
+  AUTHOR_PERMISSION
+  OPEN_SOURCE
+}
+
+model Document {
+  id          String  @id @default(uuid())
+  title       String
+  description String? @db.Text
+
+  subjectCode String
+  subjectName String
+
+  fileUrl  String  @db.Text
+  fileName String?
+  fileSize Int?
+
+  status DocumentStatus @default(PENDING)
+
+  copyrightType      CopyrightType
+  sourceUrl          String?       @db.Text
+  permissionProofUrl String?       @db.Text
+
+  copyrightDeclared   Boolean @default(false)
+  isCopyrightVerified Boolean @default(false)
+
+  rejectionReason String? @db.Text
+
+  uploaderId String
+  uploader   User   @relation("UserUploadedDocs", fields: [uploaderId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  auditLogs  DocumentAuditLog[]
+  complaints DocumentComplaint[]
+
+  @@index([subjectCode])
+  @@index([subjectName])
+  @@index([status])
+  @@index([uploaderId])
+  @@map("documents")
+}
+
+enum ComplaintStatus {
+  PENDING
+  UPHELD
+  REJECTED
+}
+
+model DocumentComplaint {
+  id String @id @default(uuid())
+
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Restrict)
+
+  complainantId String?
+  complainant   User?   @relation("ComplaintCreator", fields: [complainantId], references: [id], onDelete: SetNull)
+
+  complainantName  String?
+  complainantEmail String?
+
+  reason String @db.Text
+
+  status ComplaintStatus @default(PENDING)
+
+  resolvedById String?
+  resolvedBy   User?   @relation("ComplaintResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  resolutionNote String?   @db.Text
+  resolvedAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([documentId])
+  @@index([complainantId])
+  @@index([status])
+  @@map("document_complaints")
+}
+
+enum DocumentAuditAction {
+  UPLOADED
+  APPROVED
+  REJECTED
+  COMPLAINT_SUBMITTED
+  UNDER_REVIEW
+  REMOVED
+  RESTORED
+}
+
+model DocumentAuditLog {
+  id String @id @default(uuid())
+
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Restrict)
+
+  actorId String
+  actor   User   @relation("ActorAuditLogs", fields: [actorId], references: [id], onDelete: Restrict)
+
+  action DocumentAuditAction
+  reason String?             @db.Text
+  info   String?             @db.Text
+
+  createdAt DateTime @default(now())
+
+  @@index([documentId])
+  @@index([actorId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("document_audit_logs")
+}
+
+enum BookingStatus {
+  CONFIRMED
+  CANCELLED_BY_USER
+  NO_SHOW
+}
+
+model Room {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  capacity    Int
+  isAvailable Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bookings RoomBooking[]
+
+  @@map("rooms")
+}
+
+model RoomBooking {
+  id String @id @default(uuid())
+
+  roomId String
+  room   Room   @relation(fields: [roomId], references: [id], onDelete: Restrict)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  startTime DateTime
+  endTime   DateTime
+
+  status BookingStatus @default(CONFIRMED)
+
+  checkedInAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([roomId, startTime, endTime])
+  @@index([userId])
+  @@index([status])
+  @@map("room_bookings")
+}
