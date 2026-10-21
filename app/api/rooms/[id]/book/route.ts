@@ -13,9 +13,22 @@ export async function POST(req: Request, { params }: Props) {
     const user = await getCurrentUser();
 
     if (!user) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
+
+    const now = new Date();
+
+    if (user.bannedUntil && user.bannedUntil > now) {
       return NextResponse.json(
-        { message: "Unauthorized" },
-        { status: 401 }
+        {
+          message: `Bạn đang bị tạm khóa quyền đặt phòng đến ${user.bannedUntil.toLocaleString(
+            "vi-VN",
+            {
+              timeZone: "Asia/Ho_Chi_Minh",
+            },
+          )}.`,
+        },
+        { status: 403 },
       );
     }
 
@@ -26,62 +39,84 @@ export async function POST(req: Request, { params }: Props) {
     const startTime = new Date(body.startTime);
     const endTime = new Date(body.endTime);
 
-    if (
-      Number.isNaN(startTime.getTime()) ||
-      Number.isNaN(endTime.getTime())
-    ) {
+    if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) {
       return NextResponse.json(
         { message: "Thời gian không hợp lệ" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (endTime <= startTime) {
       return NextResponse.json(
         { message: "Giờ kết thúc phải sau giờ bắt đầu" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    const durationMs =
-      endTime.getTime() - startTime.getTime();
+    const durationMs = endTime.getTime() - startTime.getTime();
 
-    const durationMinutes =
-      durationMs / (1000 * 60);
+    const durationMinutes = durationMs / (1000 * 60);
 
     if (durationMinutes > 120) {
       return NextResponse.json(
         { message: "Mỗi lượt chỉ được đặt tối đa 2 giờ" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (durationMinutes < 15) {
       return NextResponse.json(
         { message: "Thời gian đặt tối thiểu là 15 phút" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    if (
-      startTime.getMinutes() % 15 !== 0 ||
-      endTime.getMinutes() % 15 !== 0
-    ) {
+    if (startTime.getMinutes() % 15 !== 0 || endTime.getMinutes() % 15 !== 0) {
       return NextResponse.json(
         {
-          message:
-            "Giờ bắt đầu và kết thúc phải theo bước 15 phút",
+          message: "Giờ bắt đầu và kết thúc phải theo bước 15 phút",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    if (startTime <= new Date()) {
+    if (startTime <= now) {
       return NextResponse.json(
         {
           message: "Không thể đặt phòng trong quá khứ",
         },
-        { status: 400 }
+        { status: 400 },
+      );
+    }
+
+    const maxBookingDate = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
+
+    if (startTime > maxBookingDate) {
+      return NextResponse.json(
+        {
+          message: "Bạn chỉ được phép đặt phòng trước tối đa 2 ngày.",
+        },
+        { status: 400 },
+      );
+    }
+
+    const futureBookingCount = await prisma.roomBooking.count({
+      where: {
+        userId: user.id,
+        status: "CONFIRMED",
+        startTime: {
+          gt: now,
+        },
+      },
+    });
+
+    if (futureBookingCount >= 2) {
+      return NextResponse.json(
+        {
+          message:
+            "Bạn chỉ được phép có tối đa 2 lịch đặt phòng trong tương lai.",
+        },
+        { status: 409 },
       );
     }
 
@@ -121,26 +156,25 @@ export async function POST(req: Request, { params }: Props) {
        * AND
        * newEnd > existingStart
        */
-      const overlapping =
-        await tx.roomBooking.findFirst({
-          where: {
-            roomId,
-            status: "CONFIRMED",
+      const overlapping = await tx.roomBooking.findFirst({
+        where: {
+          roomId,
+          status: "CONFIRMED",
 
-            AND: [
-              {
-                startTime: {
-                  lt: endTime,
-                },
+          AND: [
+            {
+              startTime: {
+                lt: endTime,
               },
-              {
-                endTime: {
-                  gt: startTime,
-                },
+            },
+            {
+              endTime: {
+                gt: startTime,
               },
-            ],
-          },
-        });
+            },
+          ],
+        },
+      });
 
       if (overlapping) {
         throw new Error("BOOKING_CONFLICT");
@@ -164,41 +198,31 @@ export async function POST(req: Request, { params }: Props) {
       },
       {
         status: 201,
-      }
+      },
     );
   } catch (error) {
     console.error("Create booking error:", error);
 
-    if (
-      error instanceof Error &&
-      error.message === "BOOKING_CONFLICT"
-    ) {
+    if (error instanceof Error && error.message === "BOOKING_CONFLICT") {
       return NextResponse.json(
         {
-          message:
-            "Khoảng thời gian này đã có người đặt phòng.",
+          message: "Khoảng thời gian này đã có người đặt phòng.",
         },
-        { status: 409 }
+        { status: 409 },
       );
     }
 
-    if (
-      error instanceof Error &&
-      error.message === "ROOM_NOT_FOUND"
-    ) {
+    if (error instanceof Error && error.message === "ROOM_NOT_FOUND") {
       return NextResponse.json(
         { message: "Không tìm thấy phòng" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
-    if (
-      error instanceof Error &&
-      error.message === "ROOM_UNAVAILABLE"
-    ) {
+    if (error instanceof Error && error.message === "ROOM_UNAVAILABLE") {
       return NextResponse.json(
         { message: "Phòng hiện không khả dụng" },
-        { status: 409 }
+        { status: 409 },
       );
     }
 
@@ -206,7 +230,7 @@ export async function POST(req: Request, { params }: Props) {
       {
         message: "Không thể đặt phòng",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
