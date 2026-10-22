@@ -100,6 +100,42 @@ export async function POST(req: Request, { params }: Props) {
       );
     }
 
+    const VIETNAM_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+    const startTimeInVietnam = new Date(
+      startTime.getTime() + VIETNAM_OFFSET_MS,
+    );
+
+    const year = startTimeInVietnam.getUTCFullYear();
+    const month = startTimeInVietnam.getUTCMonth();
+    const day = startTimeInVietnam.getUTCDate();
+
+    // 00:00 giờ Việt Nam quy đổi về UTC
+    const dayStart = new Date(Date.UTC(year, month, day) - VIETNAM_OFFSET_MS);
+
+    // 00:00 ngày hôm sau theo giờ Việt Nam
+    const dayEnd = new Date(Date.UTC(year, month, day + 1) - VIETNAM_OFFSET_MS);
+
+    const bookingsOnSameDay = await prisma.roomBooking.count({
+      where: {
+        userId: user.id,
+        startTime: {
+          gte: dayStart,
+          lt: dayEnd,
+        },
+      },
+    });
+
+    if (bookingsOnSameDay >= 2) {
+      return NextResponse.json(
+        {
+          message:
+            "Bạn chỉ được phép đặt tối đa 2 lượt phòng trong cùng một ngày.",
+        },
+        { status: 409 },
+      );
+    }
+
     const futureBookingCount = await prisma.roomBooking.count({
       where: {
         userId: user.id,

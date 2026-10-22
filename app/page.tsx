@@ -1,23 +1,23 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/current-user";
 
-export default async function Home() {
+export default async function HomePage() {
   const user = await getCurrentUser();
 
   if (!user) {
     redirect("/sign-in");
   }
 
-  return (
-    <main className="flex min-h-screen items-center justify-center">
-      <div className="space-y-2 text-center">
-        <h1 className="text-2xl font-bold">
-          Xin chào {user.fullName || user.email}
-        </h1>
+  if (user.role === "STUDENT") {
+    redirect("/dashboard");
+  }
 
-        <p>Email: {user.email}</p>
-        <p>Role: {user.role}</p>
-      </div>
-    </main>
-  );
+  if (
+    user.role === "ADMIN" ||
+    user.role === "LIBRARIAN"
+  ) {
+    redirect("/admin");
+  }
+
+  redirect("/sign-in");
 }

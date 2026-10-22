@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { RoomBookingForm } from "@/components/room-booking-form";
+import Link from "next/link";
 
 type Props = {
   params: Promise<{
@@ -28,13 +29,12 @@ export default async function RoomDetailPage({ params }: Props) {
     <main className="min-h-screen p-8">
       <div className="mx-auto max-w-3xl space-y-6">
         <div>
-          <a
+          <Link
             href="/rooms"
             className="text-sm underline"
           >
             ← Quay lại danh sách phòng
-          </a>
-
+          </Link>
           <h1 className="mt-4 text-2xl font-bold">
             Phòng {room.name}
           </h1>
