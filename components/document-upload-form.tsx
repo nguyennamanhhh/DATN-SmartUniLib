@@ -1,6 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import {
+  BookOpen,
+  CheckCircle2,
+  FileText,
+  FileUp,
+  ShieldCheck,
+} from "lucide-react";
+
 import { UploadDropzone } from "@/lib/uploadthing";
 
 type UploadedFile = {
@@ -12,26 +20,39 @@ type UploadedFile = {
 export function DocumentUploadForm() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+
   const [subjectCode, setSubjectCode] = useState("");
   const [subjectName, setSubjectName] = useState("");
-  const [copyrightType, setCopyrightType] = useState("SELF_CREATED");
-  const [sourceUrl, setSourceUrl] = useState("");
-  const [permissionProofUrl, setPermissionProofUrl] = useState("");
-  const [copyrightDeclared, setCopyrightDeclared] = useState(false);
 
-  const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
+  const [copyrightType, setCopyrightType] =
+    useState("SELF_CREATED");
+
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [permissionProofUrl, setPermissionProofUrl] =
+    useState("");
+
+  const [copyrightDeclared, setCopyrightDeclared] =
+    useState(false);
+
+  const [uploadedFile, setUploadedFile] =
+    useState<UploadedFile | null>(null);
+
   const [submitting, setSubmitting] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(
+    e: React.FormEvent<HTMLFormElement>,
+  ) {
     e.preventDefault();
 
     if (!uploadedFile) {
-      alert("Vui lòng upload file PDF trước.");
+      alert("Vui lòng tải lên file PDF.");
       return;
     }
 
     if (!copyrightDeclared) {
-      alert("Bạn phải xác nhận quyền sử dụng tài liệu.");
+      alert(
+        "Bạn cần xác nhận cam kết về quyền sử dụng tài liệu.",
+      );
       return;
     }
 
@@ -40,20 +61,30 @@ export function DocumentUploadForm() {
 
       const response = await fetch("/api/documents", {
         method: "POST",
+
         headers: {
           "Content-Type": "application/json",
         },
+
         body: JSON.stringify({
           title,
           description,
+
           subjectCode,
           subjectName,
+
           fileUrl: uploadedFile.url,
           fileName: uploadedFile.name,
           fileSize: uploadedFile.size,
+
           copyrightType,
-          sourceUrl,
-          permissionProofUrl,
+
+          sourceUrl:
+            sourceUrl.trim() || null,
+
+          permissionProofUrl:
+            permissionProofUrl.trim() || null,
+
           copyrightDeclared,
         }),
       });
@@ -61,23 +92,33 @@ export function DocumentUploadForm() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || "Không thể tạo tài liệu");
+        throw new Error(
+          data.message || "Không thể gửi tài liệu",
+        );
       }
 
-      alert("Tài liệu đã được gửi và đang chờ duyệt.");
+      alert(
+        "Tài liệu đã được gửi và đang chờ duyệt.",
+      );
 
       setTitle("");
       setDescription("");
+
       setSubjectCode("");
       setSubjectName("");
+
       setCopyrightType("SELF_CREATED");
+
       setSourceUrl("");
       setPermissionProofUrl("");
+
       setCopyrightDeclared(false);
       setUploadedFile(null);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Có lỗi xảy ra";
+        error instanceof Error
+          ? error.message
+          : "Có lỗi xảy ra";
 
       alert(message);
     } finally {
@@ -86,191 +127,346 @@ export function DocumentUploadForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <div>
-        <label className="mb-2 block font-medium">
-          Mã môn học
-        </label>
-
-        <input
-          value={subjectCode}
-          onChange={(e) => setSubjectCode(e.target.value)}
-          required
-          className="w-full rounded-md border px-3 py-2"
-          placeholder="VD: CSE484"
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-5 sm:space-y-6"
+    >
+      {/* Thông tin môn học */}
+      <section className="rounded-xl border bg-white p-4 sm:p-6">
+        <SectionHeader
+          icon={BookOpen}
+          title="Thông tin môn học"
+          description="Nhập môn học mà tài liệu này thuộc về."
         />
-      </div>
 
-      <div>
-        <label className="mb-2 block font-medium">
-          Tên môn học
-        </label>
-
-        <input
-          value={subjectName}
-          onChange={(e) => setSubjectName(e.target.value)}
-          required
-          className="w-full rounded-md border px-3 py-2"
-          placeholder="VD: Công nghệ Web"
-        />
-      </div>
-
-      <div>
-        <label className="mb-2 block font-medium">
-          Tiêu đề tài liệu
-        </label>
-
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          required
-          className="w-full rounded-md border px-3 py-2"
-          placeholder="VD: Tài liệu ôn tập chương 1-5"
-        />
-      </div>
-
-      <div>
-        <label className="mb-2 block font-medium">
-          Mô tả
-        </label>
-
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          className="min-h-28 w-full rounded-md border px-3 py-2"
-          placeholder="Mô tả ngắn về nội dung tài liệu"
-        />
-      </div>
-
-      <div>
-        <label className="mb-2 block font-medium">
-          Loại quyền sử dụng
-        </label>
-
-        <select
-          value={copyrightType}
-          onChange={(e) => setCopyrightType(e.target.value)}
-          className="w-full rounded-md border px-3 py-2"
-        >
-          <option value="SELF_CREATED">
-            Tài liệu tự biên soạn
-          </option>
-
-          <option value="AUTHOR_PERMISSION">
-            Có sự cho phép của tác giả
-          </option>
-
-          <option value="OPEN_SOURCE">
-            Nguồn mở / công khai
-          </option>
-        </select>
-      </div>
-
-      <div>
-        <label className="mb-2 block font-medium">
-          Nguồn tài liệu
-        </label>
-
-        <input
-          value={sourceUrl}
-          onChange={(e) => setSourceUrl(e.target.value)}
-          className="w-full rounded-md border px-3 py-2"
-          placeholder="https://..."
-        />
-      </div>
-
-      <div>
-        <label className="mb-2 block font-medium">
-          Minh chứng quyền chia sẻ
-        </label>
-
-        <input
-          value={permissionProofUrl}
-          onChange={(e) => setPermissionProofUrl(e.target.value)}
-          className="w-full rounded-md border px-3 py-2"
-          placeholder="Link email / tài liệu xác nhận quyền chia sẻ"
-        />
-      </div>
-
-      <div>
-        <label className="mb-2 block font-medium">
-          File PDF
-        </label>
-
-        {!uploadedFile ? (
-          <UploadDropzone
-            endpoint="documentUploader"
-            config={{
-              mode: "auto",
-            }}
-            onClientUploadComplete={(res) => {
-              const file = res?.[0];
-
-              if (!file) {
-                return;
+        <div className="mt-5 grid gap-4 sm:mt-6 sm:grid-cols-2 sm:gap-5">
+          <Field
+            label="Mã môn học"
+            required
+          >
+            <input
+              type="text"
+              value={subjectCode}
+              onChange={(e) =>
+                setSubjectCode(e.target.value)
               }
+              placeholder="VD: CSE484"
+              required
+              className="w-full rounded-lg border bg-white px-3 py-2.5 text-base outline-none transition focus:border-black sm:text-sm"
+            />
+          </Field>
 
-              const uploaded = {
-                url: file.serverData?.url ?? file.url,
-                name: file.serverData?.name ?? file.name,
-                size: file.serverData?.size ?? file.size,
-              };
+          <Field
+            label="Tên môn học"
+            required
+          >
+            <input
+              type="text"
+              value={subjectName}
+              onChange={(e) =>
+                setSubjectName(e.target.value)
+              }
+              placeholder="VD: Công nghệ Web"
+              required
+              className="w-full rounded-lg border bg-white px-3 py-2.5 text-base outline-none transition focus:border-black sm:text-sm"
+            />
+          </Field>
+        </div>
+      </section>
 
-              setUploadedFile(uploaded);
-
-              console.log("Upload thành công:", uploaded);
-            }}
-            onUploadError={(error: Error) => {
-              console.error("Upload lỗi:", error);
-              alert(`Upload thất bại: ${error.message}`);
-            }}
-          />
-        ) : (
-          <div className="rounded-md border p-4">
-            <p className="font-medium">
-              Đã upload: {uploadedFile.name}
-            </p>
-
-            <p className="mt-1 text-sm text-muted-foreground">
-              {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
-            </p>
-
-            <button
-              type="button"
-              onClick={() => setUploadedFile(null)}
-              className="mt-3 text-sm underline"
-            >
-              Chọn file khác
-            </button>
-          </div>
-        )}
-      </div>
-
-      <label className="flex items-start gap-3">
-        <input
-          type="checkbox"
-          checked={copyrightDeclared}
-          onChange={(e) =>
-            setCopyrightDeclared(e.target.checked)
-          }
-          className="mt-1"
+      {/* Thông tin tài liệu */}
+      <section className="rounded-xl border bg-white p-4 sm:p-6">
+        <SectionHeader
+          icon={FileText}
+          title="Thông tin tài liệu"
+          description="Cung cấp thông tin giúp người dùng hiểu nội dung tài liệu."
         />
 
-        <span className="text-sm">
-          Tôi xác nhận mình có quyền sử dụng và chia sẻ tài liệu này
-          theo chính sách của hệ thống.
-        </span>
+        <div className="mt-5 space-y-4 sm:mt-6 sm:space-y-5">
+          <Field
+            label="Tiêu đề tài liệu"
+            required
+          >
+            <input
+              type="text"
+              value={title}
+              onChange={(e) =>
+                setTitle(e.target.value)
+              }
+              placeholder="VD: Tài liệu ôn tập chương 1-5"
+              required
+              className="w-full rounded-lg border bg-white px-3 py-2.5 text-base outline-none transition focus:border-black sm:text-sm"
+            />
+          </Field>
+
+          <Field label="Mô tả">
+            <textarea
+              value={description}
+              onChange={(e) =>
+                setDescription(e.target.value)
+              }
+              placeholder="Mô tả ngắn về nội dung tài liệu..."
+              rows={5}
+              className="w-full resize-none rounded-lg border bg-white px-3 py-2.5 text-base outline-none transition focus:border-black sm:text-sm"
+            />
+          </Field>
+        </div>
+      </section>
+
+      {/* Bản quyền */}
+      <section className="rounded-xl border bg-white p-4 sm:p-6">
+        <SectionHeader
+          icon={ShieldCheck}
+          title="Quyền sử dụng"
+          description="Khai báo nguồn và quyền chia sẻ tài liệu."
+        />
+
+        <div className="mt-5 space-y-4 sm:mt-6 sm:space-y-5">
+          <Field
+            label="Loại quyền sử dụng"
+            required
+          >
+            <select
+              value={copyrightType}
+              onChange={(e) =>
+                setCopyrightType(e.target.value)
+              }
+              className="w-full rounded-lg border bg-white px-3 py-2.5 text-base outline-none transition focus:border-black sm:text-sm"
+            >
+              <option value="SELF_CREATED">
+                Tài liệu tự biên soạn
+              </option>
+
+              <option value="AUTHOR_PERMISSION">
+                Có sự cho phép của tác giả
+              </option>
+
+              <option value="OPEN_SOURCE">
+                Nguồn mở
+              </option>
+            </select>
+          </Field>
+
+          {copyrightType ===
+            "OPEN_SOURCE" && (
+            <Field
+              label="Đường dẫn nguồn"
+              required
+            >
+              <input
+                type="url"
+                value={sourceUrl}
+                onChange={(e) =>
+                  setSourceUrl(e.target.value)
+                }
+                placeholder="https://..."
+                required
+                className="w-full rounded-lg border bg-white px-3 py-2.5 text-base outline-none transition focus:border-black sm:text-sm"
+              />
+            </Field>
+          )}
+
+          {copyrightType ===
+            "AUTHOR_PERMISSION" && (
+            <Field
+              label="Minh chứng cho phép"
+              required
+            >
+              <input
+                type="url"
+                value={permissionProofUrl}
+                onChange={(e) =>
+                  setPermissionProofUrl(
+                    e.target.value,
+                  )
+                }
+                placeholder="Đường dẫn tới minh chứng..."
+                required
+                className="w-full rounded-lg border bg-white px-3 py-2.5 text-base outline-none transition focus:border-black sm:text-sm"
+              />
+            </Field>
+          )}
+        </div>
+      </section>
+
+      {/* Upload */}
+      <section className="rounded-xl border bg-white p-4 sm:p-6">
+        <SectionHeader
+          icon={FileUp}
+          title="Tệp PDF"
+          description="Chỉ chấp nhận một file PDF cho mỗi tài liệu."
+        />
+
+        <div className="mt-5 min-w-0 sm:mt-6">
+          {!uploadedFile ? (
+            <div className="max-w-full overflow-hidden">
+              <UploadDropzone
+                endpoint="documentUploader"
+                config={{
+                  mode: "auto",
+                }}
+                onClientUploadComplete={(res) => {
+                  const file = res?.[0];
+
+                  if (!file) {
+                    return;
+                  }
+
+                  const uploaded = {
+                    url:
+                      file.serverData?.url ??
+                      file.url,
+
+                    name:
+                      file.serverData?.name ??
+                      file.name,
+
+                    size:
+                      file.serverData?.size ??
+                      file.size,
+                  };
+
+                  setUploadedFile(uploaded);
+                }}
+                onUploadError={(error) => {
+                  alert(
+                    `Upload thất bại: ${error.message}`,
+                  );
+                }}
+              />
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4 rounded-lg border border-green-200 bg-green-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-100">
+                  <CheckCircle2 className="h-5 w-5 text-green-700" />
+                </div>
+
+                <div className="min-w-0">
+                  <p className="wrap-break-word font-medium text-green-900">
+                    {uploadedFile.name}
+                  </p>
+
+                  <p className="mt-1 text-xs text-green-700">
+                    {(
+                      uploadedFile.size /
+                      1024 /
+                      1024
+                    ).toFixed(2)}{" "}
+                    MB
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setUploadedFile(null)
+                }
+                className="self-start text-sm font-medium text-red-600 hover:underline sm:self-auto"
+              >
+                Chọn lại file
+              </button>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Xác nhận */}
+      <section className="rounded-xl border bg-white p-4 sm:p-6">
+        <SectionHeader
+          icon={CheckCircle2}
+          title="Xác nhận và gửi duyệt"
+          description="Vui lòng kiểm tra thông tin trước khi gửi tài liệu."
+        />
+
+        <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-lg bg-gray-50 p-4 sm:mt-6">
+          <input
+            type="checkbox"
+            checked={copyrightDeclared}
+            onChange={(e) =>
+              setCopyrightDeclared(
+                e.target.checked,
+              )
+            }
+            className="mt-1 h-4 w-4 shrink-0"
+          />
+
+          <span className="text-sm leading-6 text-gray-700">
+            Tôi xác nhận rằng tôi có quyền sử dụng và chia sẻ
+            tài liệu này, đồng thời chịu trách nhiệm về thông
+            tin đã cung cấp.
+          </span>
+        </label>
+
+        <button
+          type="submit"
+          disabled={
+            submitting ||
+            !uploadedFile ||
+            !copyrightDeclared
+          }
+          className="mt-5 inline-flex w-full items-center justify-center rounded-lg bg-black px-5 py-3 text-sm font-medium text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 sm:mt-6"
+        >
+          {submitting
+            ? "Đang gửi..."
+            : "Gửi tài liệu để duyệt"}
+        </button>
+      </section>
+    </form>
+  );
+}
+
+function SectionHeader({
+  icon: Icon,
+  title,
+  description,
+}: {
+  icon: React.ElementType;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="flex min-w-0 items-start gap-3">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-100">
+        <Icon className="h-5 w-5 text-gray-700" />
+      </div>
+
+      <div className="min-w-0">
+        <h2 className="wrap-break-word font-semibold">
+          {title}
+        </h2>
+
+        <p className="mt-1 wrap-break-word text-sm leading-6 text-muted-foreground">
+          {description}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  required = false,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="min-w-0">
+      <label className="mb-2 block text-sm font-medium">
+        {label}
+
+        {required && (
+          <span className="ml-1 text-red-500">
+            *
+          </span>
+        )}
       </label>
 
-      <button
-        type="submit"
-        disabled={submitting || !uploadedFile}
-        className="w-full rounded-md bg-black px-4 py-3 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {submitting
-          ? "Đang gửi..."
-          : "Gửi tài liệu để duyệt"}
-      </button>
-    </form>
+      {children}
+    </div>
   );
 }

@@ -2,6 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  CheckCircle2,
+  LogIn,
+} from "lucide-react";
 
 type Props = {
   bookingId: string;
@@ -23,14 +27,14 @@ export function AdminBookingActions({
         `/api/admin/bookings/${bookingId}/check-in`,
         {
           method: "POST",
-        }
+        },
       );
 
       const data = await response.json();
 
       if (!response.ok) {
         throw new Error(
-          data.message || "Không thể check-in"
+          data.message || "Không thể check-in",
         );
       }
 
@@ -52,7 +56,9 @@ export function AdminBookingActions({
   if (checkedIn) {
     return (
       <div className="mt-4">
-        <span className="rounded-md bg-green-100 px-3 py-2 text-sm text-green-700">
+        <span className="inline-flex items-center gap-2 rounded-lg bg-green-50 px-3 py-2 text-sm font-medium text-green-700">
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+
           Đã check-in
         </span>
       </div>
@@ -65,9 +71,13 @@ export function AdminBookingActions({
         type="button"
         disabled={loading}
         onClick={handleCheckIn}
-        className="rounded-md bg-black px-4 py-2 text-white disabled:opacity-50"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-black px-4 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
       >
-        {loading ? "Đang xác nhận..." : "Xác nhận check-in"}
+        <LogIn className="h-4 w-4 shrink-0" />
+
+        {loading
+          ? "Đang xác nhận..."
+          : "Xác nhận check-in"}
       </button>
     </div>
   );

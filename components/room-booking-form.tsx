@@ -1,6 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import {
+  CalendarDays,
+  Clock3,
+} from "lucide-react";
 
 type Props = {
   roomId: string;
@@ -16,7 +20,9 @@ export function RoomBookingForm({
   const [endTime, setEndTime] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(
+    e: React.FormEvent<HTMLFormElement>,
+  ) {
     e.preventDefault();
 
     if (!date || !startTime || !endTime) {
@@ -29,11 +35,11 @@ export function RoomBookingForm({
      * sau đó chuyển thành ISO để gửi lên server.
      */
     const start = new Date(
-      `${date}T${startTime}:00`
+      `${date}T${startTime}:00`,
     );
 
     const end = new Date(
-      `${date}T${endTime}:00`
+      `${date}T${endTime}:00`,
     );
 
     if (
@@ -60,14 +66,14 @@ export function RoomBookingForm({
             startTime: start.toISOString(),
             endTime: end.toISOString(),
           }),
-        }
+        },
       );
 
       const data = await response.json();
 
       if (!response.ok) {
         throw new Error(
-          data.message || "Không thể đặt phòng"
+          data.message || "Không thể đặt phòng",
         );
       }
 
@@ -91,70 +97,117 @@ export function RoomBookingForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="space-y-5 rounded-lg border p-6"
+      className="rounded-xl border bg-white p-4 sm:p-6"
     >
+      {/* Header */}
       <div>
-        <h2 className="text-lg font-semibold">
+        <h2 className="wrap-break-word text-lg font-semibold">
           Đặt phòng {roomName}
         </h2>
 
-        <p className="mt-1 text-sm text-muted-foreground">
-          Mỗi lượt đặt tối đa 2 giờ. Thời gian theo bước
-          15 phút.
+        <p className="mt-1 text-sm leading-6 text-muted-foreground">
+          Chọn ngày và khung giờ bạn muốn sử dụng phòng.
         </p>
       </div>
 
-      <div>
-        <label className="mb-2 block text-sm font-medium">
-          Ngày sử dụng
-        </label>
+      {/* Quy định */}
+      <div className="mt-5 rounded-lg bg-gray-50 p-4">
+        <p className="text-sm font-medium">
+          Quy định đặt phòng
+        </p>
 
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          required
-          className="w-full rounded-md border px-3 py-2"
-        />
+        <ul className="mt-2 space-y-1 text-sm leading-6 text-muted-foreground">
+          <li>• Mỗi lượt đặt tối đa 2 giờ.</li>
+          <li>• Thời gian đặt theo bước 15 phút.</li>
+          <li>• Chỉ được đặt trước tối đa 2 ngày.</li>
+        </ul>
       </div>
 
-      <div>
-        <label className="mb-2 block text-sm font-medium">
-          Giờ bắt đầu
-        </label>
+      <div className="mt-6 space-y-5">
+        {/* Ngày */}
+        <Field
+          icon={CalendarDays}
+          label="Ngày sử dụng"
+        >
+          <input
+            type="date"
+            value={date}
+            onChange={(e) =>
+              setDate(e.target.value)
+            }
+            required
+            className="w-full rounded-lg border bg-white px-3 py-2.5 text-base outline-none transition focus:border-black sm:text-sm"
+          />
+        </Field>
 
-        <input
-          type="time"
-          step="900"
-          value={startTime}
-          onChange={(e) => setStartTime(e.target.value)}
-          required
-          className="w-full rounded-md border px-3 py-2"
-        />
+        {/* Giờ */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field
+            icon={Clock3}
+            label="Giờ bắt đầu"
+          >
+            <input
+              type="time"
+              step="900"
+              value={startTime}
+              onChange={(e) =>
+                setStartTime(e.target.value)
+              }
+              required
+              className="w-full rounded-lg border bg-white px-3 py-2.5 text-base outline-none transition focus:border-black sm:text-sm"
+            />
+          </Field>
+
+          <Field
+            icon={Clock3}
+            label="Giờ kết thúc"
+          >
+            <input
+              type="time"
+              step="900"
+              value={endTime}
+              onChange={(e) =>
+                setEndTime(e.target.value)
+              }
+              required
+              className="w-full rounded-lg border bg-white px-3 py-2.5 text-base outline-none transition focus:border-black sm:text-sm"
+            />
+          </Field>
+        </div>
       </div>
 
-      <div>
-        <label className="mb-2 block text-sm font-medium">
-          Giờ kết thúc
-        </label>
-
-        <input
-          type="time"
-          step="900"
-          value={endTime}
-          onChange={(e) => setEndTime(e.target.value)}
-          required
-          className="w-full rounded-md border px-3 py-2"
-        />
-      </div>
-
+      {/* Submit */}
       <button
         type="submit"
         disabled={loading}
-        className="rounded-md bg-black px-4 py-2 text-white disabled:opacity-50"
+        className="mt-6 inline-flex w-full items-center justify-center rounded-lg bg-black px-4 py-3 text-sm font-medium text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {loading ? "Đang đặt..." : "Đặt phòng"}
+        {loading
+          ? "Đang đặt..."
+          : "Đặt phòng"}
       </button>
     </form>
+  );
+}
+
+function Field({
+  icon: Icon,
+  label,
+  children,
+}: {
+  icon: React.ElementType;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="min-w-0">
+      <label className="mb-2 flex items-center gap-2 text-sm font-medium">
+        <Icon className="h-4 w-4 shrink-0 text-gray-500" />
+
+        {label}
+      </label>
+
+      {children}
+    </div>
   );
 }

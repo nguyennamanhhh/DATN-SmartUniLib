@@ -1,7 +1,20 @@
+import Link from "next/link";
+import {
+  CalendarCheck,
+  Clock3,
+  DoorOpen,
+  Mail,
+  User,
+} from "lucide-react";
+
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+
 import { AdminBookingActions } from "@/components/admin-booking-actions";
 import { ProcessNoShowsButton } from "@/components/process-no-shows-button";
+import { StatusBadge } from "@/components/status-badge";
+import { PageHeader } from "@/components/page-header";
+import { EmptyState } from "@/components/empty-state";
 
 type Props = {
   searchParams: Promise<{
@@ -52,126 +65,210 @@ export default async function AdminBookingsPage({
   });
 
   return (
-    <main className="min-h-screen p-8">
-      <div className="mx-auto max-w-6xl space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold">
-            Quản lý lịch đặt phòng
-          </h1>
+    <main className="p-4 sm:p-6 lg:p-8">
+      <div className="mx-auto max-w-7xl space-y-6 sm:space-y-8">
+        <PageHeader
+          title="Quản lý lịch đặt phòng"
+          description="Theo dõi lịch đặt, check-in và các trường hợp no-show."
+          action={<ProcessNoShowsButton />}
+        />
 
-          <p className="mt-2 text-sm text-muted-foreground">
-            Theo dõi lịch đặt, check-in và các trường hợp
-            NO_SHOW.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-3">
-          <a
+        {/* Bộ lọc */}
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+          <FilterLink
             href="/admin/bookings"
-            className="rounded-md border px-4 py-2"
-          >
-            Tất cả
-          </a>
+            label="Tất cả"
+            active={status === "ALL"}
+          />
 
-          <a
+          <FilterLink
             href="/admin/bookings?status=CONFIRMED"
-            className="rounded-md border px-4 py-2"
-          >
-            Đang xác nhận
-          </a>
+            label="Đã xác nhận"
+            active={status === "CONFIRMED"}
+          />
 
-          <a
+          <FilterLink
             href="/admin/bookings?status=CANCELLED_BY_USER"
-            className="rounded-md border px-4 py-2"
-          >
-            Đã hủy
-          </a>
+            label="Đã hủy"
+            active={status === "CANCELLED_BY_USER"}
+          />
 
-          <a
+          <FilterLink
             href="/admin/bookings?status=NO_SHOW"
-            className="rounded-md border px-4 py-2"
-          >
-            No-show
-          </a>
+            label="No-show"
+            active={status === "NO_SHOW"}
+          />
         </div>
 
-        <div>
-          <ProcessNoShowsButton />
-        </div>
-
-        <div className="space-y-4">
-          {bookings.length === 0 ? (
-            <div className="rounded-lg border p-6">
-              Không có lịch đặt phòng phù hợp.
-            </div>
-          ) : (
-            bookings.map((booking) => (
-              <div
+        {bookings.length === 0 ? (
+          <EmptyState
+            icon={CalendarCheck}
+            title="Không có lịch đặt phòng"
+            description="Không có booking nào phù hợp với bộ lọc hiện tại."
+          />
+        ) : (
+          <div className="space-y-4">
+            {bookings.map((booking) => (
+              <article
                 key={booking.id}
-                className="rounded-lg border p-6"
+                className="rounded-xl border bg-white p-4 transition hover:shadow-sm sm:p-6"
               >
-                <div className="grid gap-6 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <h2 className="text-lg font-semibold">
-                      Phòng {booking.room.name}
-                    </h2>
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+                  {/* Thông tin booking */}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-gray-100">
+                        <DoorOpen className="h-5 w-5 text-gray-600" />
+                      </div>
 
-                    <p>
-                      <strong>Người đặt:</strong>{" "}
-                      {booking.user.fullName ||
-                        booking.user.email}
-                    </p>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <h2 className="wrap-break-word text-lg font-semibold">
+                            Phòng {booking.room.name}
+                          </h2>
 
-                    <p>
-                      <strong>Email:</strong>{" "}
-                      {booking.user.email}
-                    </p>
+                          <div className="w-fit shrink-0">
+                            <StatusBadge
+                              status={booking.status}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
 
-                    <p>
-                      <strong>Trạng thái:</strong>{" "}
-                      {booking.status}
-                    </p>
+                    <div className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
+                      <InfoRow
+                        icon={User}
+                        label="Người đặt"
+                        value={
+                          booking.user.fullName ||
+                          booking.user.email
+                        }
+                      />
+
+                      <InfoRow
+                        icon={Mail}
+                        label="Email"
+                        value={booking.user.email}
+                      />
+
+                      <InfoRow
+                        icon={Clock3}
+                        label="Bắt đầu"
+                        value={formatDateTime(
+                          booking.startTime,
+                        )}
+                      />
+
+                      <InfoRow
+                        icon={Clock3}
+                        label="Kết thúc"
+                        value={formatDateTime(
+                          booking.endTime,
+                        )}
+                      />
+                    </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <p>
-                      <strong>Bắt đầu:</strong>{" "}
-                      {booking.startTime.toLocaleString(
-                        "vi-VN",
-                      )}
-                    </p>
+                  {/* Check-in */}
+                  <div className="w-full rounded-lg border bg-gray-50 p-4 lg:w-72 lg:shrink-0">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs text-muted-foreground">
+                          Check-in
+                        </p>
 
-                    <p>
-                      <strong>Kết thúc:</strong>{" "}
-                      {booking.endTime.toLocaleString(
-                        "vi-VN",
-                      )}
-                    </p>
+                        <p className="mt-1 wrap-break-word text-sm font-medium">
+                          {booking.checkedInAt
+                            ? formatDateTime(
+                                booking.checkedInAt,
+                              )
+                            : "Chưa check-in"}
+                        </p>
+                      </div>
 
-                    <p>
-                      <strong>Check-in:</strong>{" "}
-                      {booking.checkedInAt
-                        ? booking.checkedInAt.toLocaleString(
-                            "vi-VN",
-                          )
-                        : "Chưa check-in"}
-                    </p>
+                      <Clock3 className="h-4 w-4 shrink-0 text-gray-400" />
+                    </div>
+
+                    {booking.status ===
+                      "CONFIRMED" && (
+                      <div className="mt-4 border-t pt-4">
+                        <AdminBookingActions
+                          bookingId={booking.id}
+                          checkedIn={Boolean(
+                            booking.checkedInAt,
+                          )}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
-
-                {booking.status === "CONFIRMED" && (
-                  <AdminBookingActions
-                    bookingId={booking.id}
-                    checkedIn={Boolean(
-                      booking.checkedInAt,
-                    )}
-                  />
-                )}
-              </div>
-            ))
-          )}
-        </div>
+              </article>
+            ))}
+          </div>
+        )}
       </div>
     </main>
   );
+}
+
+function FilterLink({
+  href,
+  label,
+  active,
+}: {
+  href: string;
+  label: string;
+  active: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className={`flex min-w-0 items-center justify-center rounded-lg border px-3 py-2 text-center text-sm font-medium transition sm:px-4 ${
+        active
+          ? "border-black bg-black text-white"
+          : "bg-white text-gray-700 hover:bg-gray-50"
+      }`}
+    >
+      <span className="wrap-break-word">
+        {label}
+      </span>
+    </Link>
+  );
+}
+
+function InfoRow({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex min-w-0 items-start gap-3">
+      <Icon className="mt-0.5 h-4 w-4 shrink-0 text-gray-500" />
+
+      <div className="min-w-0">
+        <p className="text-xs text-muted-foreground">
+          {label}
+        </p>
+
+        <p className="mt-1 wrap-break-word font-medium">
+          {value}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function formatDateTime(date: Date) {
+  return date.toLocaleString("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
 }

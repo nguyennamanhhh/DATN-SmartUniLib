@@ -1,6 +1,19 @@
 import Link from "next/link";
+import {
+  BookOpenCheck,
+  CalendarCheck,
+  FileClock,
+  Files,
+  MessageSquareWarning,
+  ShieldAlert,
+  TriangleAlert,
+  Users,
+} from "lucide-react";
+
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { PageHeader } from "@/components/page-header";
+import { StatusBadge } from "@/components/status-badge";
 
 export default async function AdminDashboardPage() {
   await requireRole(["ADMIN", "LIBRARIAN"]);
@@ -16,7 +29,6 @@ export default async function AdminDashboardPage() {
     confirmedBookings,
     noShowBookings,
     bannedUsers,
-
     recentPendingDocuments,
     recentComplaints,
     recentBookings,
@@ -99,105 +111,123 @@ export default async function AdminDashboardPage() {
   ]);
 
   return (
-    <main className="p-8">
-      <div className="mx-auto max-w-7xl space-y-8">
-        {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold">
-            Dashboard quản trị
-          </h1>
+    <main className="p-4 sm:p-6 lg:p-8">
+      <div className="mx-auto max-w-7xl space-y-6 sm:space-y-8">
+        <PageHeader
+          title="Dashboard quản trị"
+          description="Theo dõi tình trạng thư viện số, booking và các tác vụ cần xử lý."
+        />
 
-          <p className="mt-1 text-muted-foreground">
-            Tổng quan hoạt động của hệ thống SmartUniLib.
-          </p>
-        </div>
+        {/* Tổng quan */}
+        <section>
+          <h2 className="text-lg font-semibold">
+            Tổng quan hệ thống
+          </h2>
 
-        {/* Cards */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <DashboardCard
-            title="Tổng người dùng"
-            value={totalUsers}
-          />
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <DashboardCard
+              title="Tổng người dùng"
+              value={totalUsers}
+              icon={Users}
+              description="Tổng số tài khoản trong hệ thống"
+            />
 
-          <DashboardCard
-            title="Tổng tài liệu"
-            value={totalDocuments}
-          />
+            <DashboardCard
+              title="Tổng tài liệu"
+              value={totalDocuments}
+              icon={Files}
+              description="Tất cả tài liệu đã được tải lên"
+            />
 
-          <DashboardCard
-            title="Tài liệu chờ duyệt"
-            value={pendingDocumentsCount}
-          />
+            <DashboardCard
+              title="Tổng booking"
+              value={totalBookings}
+              icon={CalendarCheck}
+              description="Tổng lượt đặt phòng đã tạo"
+            />
 
-          <DashboardCard
-            title="Khiếu nại chờ xử lý"
-            value={pendingComplaintsCount}
-          />
-
-          <DashboardCard
-            title="Tổng booking"
-            value={totalBookings}
-          />
-
-          <DashboardCard
-            title="Booking confirmed"
-            value={confirmedBookings}
-          />
-
-          <DashboardCard
-            title="No-show"
-            value={noShowBookings}
-          />
-
-          <DashboardCard
-            title="User đang bị khóa"
-            value={bannedUsers}
-          />
-        </div>
-
-        {/* Pending documents */}
-        <section className="rounded-lg border bg-white">
-          <div className="flex items-center justify-between border-b p-5">
-            <div>
-              <h2 className="text-lg font-semibold">
-                Tài liệu chờ duyệt
-              </h2>
-
-              <p className="text-sm text-muted-foreground">
-                Những tài liệu mới nhất đang chờ xử lý.
-              </p>
-            </div>
-
-            <Link
-              href="/admin/documents"
-              className="text-sm underline"
-            >
-              Xem tất cả
-            </Link>
+            <DashboardCard
+              title="User đang bị khóa"
+              value={bannedUsers}
+              icon={ShieldAlert}
+              description="Người dùng đang bị hạn chế đặt phòng"
+            />
           </div>
+        </section>
+
+        {/* Cần xử lý */}
+        <section>
+          <h2 className="text-lg font-semibold">
+            Cần xử lý
+          </h2>
+
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <DashboardCard
+              title="Tài liệu chờ duyệt"
+              value={pendingDocumentsCount}
+              icon={FileClock}
+              description="Tài liệu đang chờ kiểm duyệt"
+            />
+
+            <DashboardCard
+              title="Khiếu nại chờ xử lý"
+              value={pendingComplaintsCount}
+              icon={MessageSquareWarning}
+              description="Khiếu nại bản quyền chưa xử lý"
+            />
+
+            <DashboardCard
+              title="Booking confirmed"
+              value={confirmedBookings}
+              icon={BookOpenCheck}
+              description="Booking đang còn hiệu lực"
+            />
+
+            <DashboardCard
+              title="No-show"
+              value={noShowBookings}
+              icon={TriangleAlert}
+              description="Các trường hợp không check-in"
+            />
+          </div>
+        </section>
+
+        {/* Tài liệu chờ duyệt */}
+        <section className="overflow-hidden rounded-xl border bg-white">
+          <SectionHeader
+            title="Tài liệu chờ duyệt"
+            description="Các tài liệu mới nhất cần được kiểm tra."
+            href="/admin/documents"
+          />
 
           <div className="divide-y">
             {recentPendingDocuments.length === 0 ? (
-              <p className="p-5 text-sm text-muted-foreground">
+              <p className="p-4 text-sm text-muted-foreground sm:p-5">
                 Không có tài liệu nào đang chờ duyệt.
               </p>
             ) : (
               recentPendingDocuments.map((document) => (
                 <div
                   key={document.id}
-                  className="flex items-center justify-between gap-4 p-5"
+                  className="flex flex-col gap-4 p-4 sm:p-5 md:flex-row md:items-center md:justify-between"
                 >
-                  <div>
-                    <p className="font-medium">
-                      {document.title}
-                    </p>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="wrap-break-word font-medium">
+                        {document.title}
+                      </p>
 
-                    <p className="mt-1 text-sm text-muted-foreground">
+                      <StatusBadge
+                        status={document.status}
+                      />
+                    </div>
+
+                    <p className="mt-1 wrap-break-word text-sm text-muted-foreground">
                       {document.subjectCode} -{" "}
                       {document.subjectName}
                     </p>
 
-                    <p className="mt-1 text-sm text-muted-foreground">
+                    <p className="mt-1 wrap-break-word text-xs text-muted-foreground">
                       Người tải:{" "}
                       {document.uploader.fullName ||
                         document.uploader.email}
@@ -206,9 +236,9 @@ export default async function AdminDashboardPage() {
 
                   <Link
                     href={`/admin/documents/${document.id}`}
-                    className="rounded-md border px-3 py-2 text-sm"
+                    className="inline-flex w-full shrink-0 items-center justify-center rounded-lg border px-3 py-2 text-sm font-medium transition hover:bg-gray-50 md:w-auto"
                   >
-                    Xem
+                    Xem chi tiết
                   </Link>
                 </div>
               ))
@@ -216,50 +246,44 @@ export default async function AdminDashboardPage() {
           </div>
         </section>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Complaints */}
-          <section className="rounded-lg border bg-white">
-            <div className="flex items-center justify-between border-b p-5">
-              <div>
-                <h2 className="text-lg font-semibold">
-                  Khiếu nại gần đây
-                </h2>
-
-                <p className="text-sm text-muted-foreground">
-                  Các khiếu nại đang chờ xử lý.
-                </p>
-              </div>
-
-              <Link
-                href="/admin/complaints"
-                className="text-sm underline"
-              >
-                Xem tất cả
-              </Link>
-            </div>
+        {/* Khiếu nại + Booking */}
+        <div className="grid gap-5 sm:gap-6 xl:grid-cols-2">
+          {/* Khiếu nại */}
+          <section className="overflow-hidden rounded-xl border bg-white">
+            <SectionHeader
+              title="Khiếu nại gần đây"
+              description="Các khiếu nại đang chờ xác minh."
+              href="/admin/complaints"
+            />
 
             <div className="divide-y">
               {recentComplaints.length === 0 ? (
-                <p className="p-5 text-sm text-muted-foreground">
+                <p className="p-4 text-sm text-muted-foreground sm:p-5">
                   Không có khiếu nại đang chờ xử lý.
                 </p>
               ) : (
                 recentComplaints.map((complaint) => (
                   <div
                     key={complaint.id}
-                    className="p-5"
+                    className="p-4 sm:p-5"
                   >
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="font-medium">
-                          {complaint.document.title}
-                        </p>
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="wrap-break-word font-medium">
+                            {complaint.document.title}
+                          </p>
 
-                        <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
+                          <StatusBadge
+                            status={complaint.status}
+                          />
+                        </div>
+
+                        <p className="mt-2 line-clamp-2 wrap-break-word text-sm text-muted-foreground">
                           {complaint.reason}
                         </p>
 
-                        <p className="mt-1 text-xs text-muted-foreground">
+                        <p className="mt-2 wrap-break-word text-xs text-muted-foreground">
                           Người gửi:{" "}
                           {complaint.complainant?.fullName ||
                             complaint.complainantName ||
@@ -270,7 +294,7 @@ export default async function AdminDashboardPage() {
 
                       <Link
                         href={`/admin/complaints/${complaint.id}`}
-                        className="rounded-md border px-3 py-2 text-sm"
+                        className="inline-flex w-full shrink-0 items-center justify-center rounded-lg border px-3 py-2 text-sm font-medium transition hover:bg-gray-50 sm:w-auto"
                       >
                         Xem
                       </Link>
@@ -281,59 +305,55 @@ export default async function AdminDashboardPage() {
             </div>
           </section>
 
-          {/* Bookings */}
-          <section className="rounded-lg border bg-white">
-            <div className="flex items-center justify-between border-b p-5">
-              <div>
-                <h2 className="text-lg font-semibold">
-                  Booking gần đây
-                </h2>
-
-                <p className="text-sm text-muted-foreground">
-                  Các lượt đặt phòng mới nhất.
-                </p>
-              </div>
-
-              <Link
-                href="/admin/bookings"
-                className="text-sm underline"
-              >
-                Xem tất cả
-              </Link>
-            </div>
+          {/* Booking */}
+          <section className="overflow-hidden rounded-xl border bg-white">
+            <SectionHeader
+              title="Booking gần đây"
+              description="Các lượt đặt phòng mới nhất."
+              href="/admin/bookings"
+            />
 
             <div className="divide-y">
               {recentBookings.length === 0 ? (
-                <p className="p-5 text-sm text-muted-foreground">
+                <p className="p-4 text-sm text-muted-foreground sm:p-5">
                   Chưa có booking nào.
                 </p>
               ) : (
                 recentBookings.map((booking) => (
                   <div
                     key={booking.id}
-                    className="p-5"
+                    className="p-4 sm:p-5"
                   >
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="font-medium">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="wrap-break-word font-medium">
                           Phòng {booking.room.name}
                         </p>
 
-                        <p className="mt-1 text-sm text-muted-foreground">
+                        <p className="mt-1 wrap-break-word text-sm text-muted-foreground">
                           {booking.user.fullName ||
                             booking.user.email}
                         </p>
 
-                        <p className="mt-1 text-sm">
+                        <p className="mt-1 text-xs text-muted-foreground">
                           {booking.startTime.toLocaleString(
                             "vi-VN",
+                            {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "numeric",
+                            },
                           )}
                         </p>
                       </div>
 
-                      <span className="rounded-md bg-gray-100 px-2 py-1 text-xs">
-                        {booking.status}
-                      </span>
+                      <div className="w-fit shrink-0">
+                        <StatusBadge
+                          status={booking.status}
+                        />
+                      </div>
                     </div>
                   </div>
                 ))
@@ -349,19 +369,66 @@ export default async function AdminDashboardPage() {
 function DashboardCard({
   title,
   value,
+  icon: Icon,
+  description,
 }: {
   title: string;
   value: number;
+  icon: React.ElementType;
+  description: string;
 }) {
   return (
-    <div className="rounded-lg border bg-white p-5">
-      <p className="text-sm text-muted-foreground">
-        {title}
-      </p>
+    <div className="min-w-0 rounded-xl border bg-white p-4 transition hover:-translate-y-0.5 hover:shadow-sm sm:p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="wrap-break-word text-sm text-muted-foreground">
+            {title}
+          </p>
 
-      <p className="mt-2 text-3xl font-bold">
-        {value}
+          <p className="mt-2 text-3xl font-bold">
+            {value}
+          </p>
+        </div>
+
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-100">
+          <Icon className="h-5 w-5 text-gray-600" />
+        </div>
+      </div>
+
+      <p className="mt-4 wrap-break-word text-xs leading-5 text-muted-foreground">
+        {description}
       </p>
+    </div>
+  );
+}
+
+function SectionHeader({
+  title,
+  description,
+  href,
+}: {
+  title: string;
+  description: string;
+  href: string;
+}) {
+  return (
+    <div className="flex flex-col gap-4 border-b p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+      <div className="min-w-0">
+        <h2 className="wrap-break-word text-lg font-semibold">
+          {title}
+        </h2>
+
+        <p className="mt-1 text-sm leading-6 text-muted-foreground">
+          {description}
+        </p>
+      </div>
+
+      <Link
+        href={href}
+        className="inline-flex w-full shrink-0 items-center justify-center rounded-lg border px-3 py-2 text-sm font-medium transition hover:bg-gray-50 sm:w-auto"
+      >
+        Xem tất cả
+      </Link>
     </div>
   );
 }
