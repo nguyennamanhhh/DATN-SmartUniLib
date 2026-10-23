@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/current-user";
 import type { Role } from "@prisma/client";
+
+import { getCurrentUser } from "@/lib/current-user";
 
 export async function requireUser() {
   const user = await getCurrentUser();

@@ -1,4 +1,5 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
+
 import { prisma } from "@/lib/prisma";
 
 export async function getCurrentUser() {
@@ -14,7 +15,13 @@ export async function getCurrentUser() {
     return null;
   }
 
-  const email = clerkUser.emailAddresses[0]?.emailAddress;
+  const primaryEmail = clerkUser.emailAddresses.find(
+    (email) => email.id === clerkUser.primaryEmailAddressId,
+  )?.emailAddress;
+
+  const fallbackEmail = clerkUser.emailAddresses[0]?.emailAddress;
+
+  const email = primaryEmail || fallbackEmail;
 
   if (!email) {
     return null;
@@ -22,16 +29,19 @@ export async function getCurrentUser() {
 
   const fullName = [clerkUser.firstName, clerkUser.lastName]
     .filter(Boolean)
-    .join(" ");
+    .join(" ")
+    .trim();
 
   const user = await prisma.user.upsert({
     where: {
       id: userId,
     },
+
     update: {
       email,
       fullName: fullName || null,
     },
+
     create: {
       id: userId,
       email,

@@ -1,124 +1,204 @@
 import { NextResponse } from "next/server";
+
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 
+const NO_SHOW_GRACE_MINUTES = 15;
+const BAN_THRESHOLD = 3;
+const BAN_DAYS = 7;
+
 export async function POST() {
   try {
+    /*
+     * 1. Authentication
+     */
     const user = await getCurrentUser();
 
     if (!user) {
       return NextResponse.json(
-        { message: "Unauthorized" },
-        { status: 401 }
+        {
+          message: "Unauthorized",
+        },
+        {
+          status: 401,
+        },
       );
     }
 
-    if (!["ADMIN", "LIBRARIAN"].includes(user.role)) {
+    /*
+     * 2. Authorization
+     */
+    if (user.role !== "ADMIN" && user.role !== "LIBRARIAN") {
       return NextResponse.json(
-        { message: "Forbidden" },
-        { status: 403 }
+        {
+          message: "Forbidden",
+        },
+        {
+          status: 403,
+        },
       );
     }
 
+    /*
+     * 3. Xác định mốc quá hạn.
+     *
+     * Ví dụ hiện tại là 15:30 thì booking có startTime
+     * trước 15:15 mới đủ điều kiện NO_SHOW.
+     */
     const now = new Date();
 
-    // Những booking chưa check-in và đã quá hạn 15 phút
-    const overdueBookings =
-      await prisma.roomBooking.findMany({
-        where: {
-          status: "CONFIRMED",
-          checkedInAt: null,
-          startTime: {
-            lt: new Date(
-              now.getTime() - 15 * 60 * 1000
-            ),
-          },
+    const overdueCutoff = new Date(
+      now.getTime() - NO_SHOW_GRACE_MINUTES * 60 * 1000,
+    );
+
+    /*
+     * 4. Chỉ lấy những booking có khả năng cần xử lý.
+     *
+     * Đây chỉ là bước tạo danh sách ứng viên.
+     * Việc quyết định booking nào thực sự được xử lý
+     * vẫn được thực hiện bằng atomic update bên dưới.
+     */
+    const overdueBookings = await prisma.roomBooking.findMany({
+      where: {
+        status: "CONFIRMED",
+        checkedInAt: null,
+
+        startTime: {
+          lt: overdueCutoff,
         },
-      });
+      },
+
+      select: {
+        id: true,
+        userId: true,
+      },
+
+      orderBy: {
+        startTime: "asc",
+      },
+    });
 
     let processedCount = 0;
+    let bannedCount = 0;
 
+    /*
+     * 5. Xử lý từng booking.
+     */
     for (const booking of overdueBookings) {
-      await prisma.$transaction(async (tx) => {
-        // Đọc lại booking để tránh xử lý lặp
-        const currentBooking =
-          await tx.roomBooking.findUnique({
-            where: {
-              id: booking.id,
-            },
-          });
-
-        if (
-          !currentBooking ||
-          currentBooking.status !== "CONFIRMED" ||
-          currentBooking.checkedInAt
-        ) {
-          return;
-        }
-
-        const deadline = new Date(
-          currentBooking.startTime.getTime() +
-            15 * 60 * 1000
-        );
-
-        if (now <= deadline) {
-          return;
-        }
-
-        await tx.roomBooking.update({
+      const result = await prisma.$transaction(async (tx) => {
+        /*
+         * Atomic claim:
+         *
+         * Chỉ request đầu tiên còn thấy:
+         * - status = CONFIRMED
+         * - checkedInAt = null
+         * - đã quá 15 phút
+         *
+         * mới đổi được sang NO_SHOW.
+         */
+        const bookingUpdate = await tx.roomBooking.updateMany({
           where: {
-            id: currentBooking.id,
+            id: booking.id,
+
+            status: "CONFIRMED",
+
+            checkedInAt: null,
+
+            startTime: {
+              lt: overdueCutoff,
+            },
           },
+
           data: {
             status: "NO_SHOW",
           },
         });
 
-        const bookingOwner = await tx.user.findUnique({
-          where: {
-            id: currentBooking.userId,
-          },
-          select: {
-            noShowCount: true,
-          },
-        });
-
-        if (!bookingOwner) {
-          throw new Error("USER_NOT_FOUND");
+        /*
+         * count = 0 nghĩa là booking vừa được
+         * request khác xử lý hoặc vừa check-in.
+         */
+        if (bookingUpdate.count !== 1) {
+          return {
+            processed: false,
+            banned: false,
+          };
         }
 
-        const nextNoShowCount =
-          bookingOwner.noShowCount + 1;
-
-        const shouldBan = nextNoShowCount >= 3;
-
-        await tx.user.update({
+        /*
+         * Tăng noShowCount theo kiểu atomic.
+         *
+         * Prisma trả lại giá trị sau khi increment,
+         * nên không cần findUnique() trước rồi tự +1.
+         */
+        const updatedUser = await tx.user.update({
           where: {
-            id: currentBooking.userId,
+            id: booking.userId,
           },
+
           data: {
             noShowCount: {
               increment: 1,
             },
+          },
 
-            ...(shouldBan
-              ? {
-                  bannedUntil: new Date(
-                    now.getTime() +
-                      7 * 24 * 60 * 60 * 1000
-                  ),
-                }
-              : {}),
+          select: {
+            id: true,
+            noShowCount: true,
+            bannedUntil: true,
           },
         });
 
-        processedCount++;
+        /*
+         * Nếu đạt ngưỡng thì khóa 7 ngày.
+         */
+        if (updatedUser.noShowCount >= BAN_THRESHOLD) {
+          const bannedUntil = new Date(
+            now.getTime() + BAN_DAYS * 24 * 60 * 60 * 1000,
+          );
+
+          await tx.user.update({
+            where: {
+              id: updatedUser.id,
+            },
+
+            data: {
+              bannedUntil,
+            },
+          });
+
+          return {
+            processed: true,
+            banned: true,
+          };
+        }
+
+        return {
+          processed: true,
+          banned: false,
+        };
       });
+
+      if (result.processed) {
+        processedCount++;
+      }
+
+      if (result.banned) {
+        bannedCount++;
+      }
     }
 
+    /*
+     * 6. Response
+     */
     return NextResponse.json({
-      message: `Đã xử lý ${processedCount} lịch NO_SHOW`,
+      message:
+        processedCount === 0
+          ? "Không có lịch nào cần xử lý NO_SHOW"
+          : `Đã xử lý ${processedCount} lịch NO_SHOW`,
+
       processedCount,
+      bannedCount,
     });
   } catch (error) {
     console.error("Process no-shows error:", error);
@@ -127,7 +207,9 @@ export async function POST() {
       {
         message: "Không thể xử lý NO_SHOW",
       },
-      { status: 500 }
+      {
+        status: 500,
+      },
     );
   }
 }

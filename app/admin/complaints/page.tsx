@@ -143,7 +143,7 @@ export default async function AdminComplaintsPage() {
             {/* Desktop / Tablet */}
             <div className="hidden overflow-hidden rounded-xl border bg-white md:block">
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[950px] text-left text-sm">
+                <table className="w-full min-w-237.5 text-left text-sm">
                   <thead className="border-b bg-gray-50">
                     <tr>
                       <th className="px-5 py-4 font-medium text-gray-600">
