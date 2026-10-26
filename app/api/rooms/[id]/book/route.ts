@@ -12,21 +12,30 @@ type Props = {
 const MAX_BOOKING_MINUTES = 120;
 const MIN_BOOKING_MINUTES = 15;
 const SLOT_MINUTES = 15;
+
 const MAX_ADVANCE_DAYS = 2;
+
 const MAX_BOOKINGS_PER_DAY = 2;
 const MAX_FUTURE_BOOKINGS = 2;
 
 const VIETNAM_OFFSET_MS = 7 * 60 * 60 * 1000;
 
 class BookingConflictError extends Error {}
+
 class RoomNotFoundError extends Error {}
+
 class RoomUnavailableError extends Error {}
+
+class UserNotFoundError extends Error {}
+
 class UserBannedError extends Error {
   constructor(public readonly bannedUntil: Date) {
     super("USER_BANNED");
   }
 }
+
 class DailyBookingLimitError extends Error {}
+
 class FutureBookingLimitError extends Error {}
 
 export async function POST(req: Request, { params }: Props) {
@@ -64,7 +73,7 @@ export async function POST(req: Request, { params }: Props) {
     }
 
     /*
-     * 3. Parse body
+     * 3. Parse request body
      */
     let body: unknown;
 
@@ -109,6 +118,7 @@ export async function POST(req: Request, { params }: Props) {
     }
 
     const startTime = new Date(rawStartTime);
+
     const endTime = new Date(rawEndTime);
 
     /*
@@ -125,6 +135,9 @@ export async function POST(req: Request, { params }: Props) {
       );
     }
 
+    /*
+     * endTime phải lớn hơn startTime.
+     */
     if (endTime <= startTime) {
       return NextResponse.json(
         {
@@ -136,6 +149,9 @@ export async function POST(req: Request, { params }: Props) {
       );
     }
 
+    /*
+     * 5. Duration
+     */
     const durationMinutes =
       (endTime.getTime() - startTime.getTime()) / (1000 * 60);
 
@@ -162,10 +178,19 @@ export async function POST(req: Request, { params }: Props) {
     }
 
     /*
-     * Chỉ chấp nhận đúng các mốc:
-     * 10:00, 10:15, 10:30, 10:45...
+     * 6. Validate slot 15 phút.
      *
-     * Không cho lọt 10:15:30.
+     * Chấp nhận:
+     *
+     * 10:00:00
+     * 10:15:00
+     * 10:30:00
+     * 10:45:00
+     *
+     * Không chấp nhận:
+     *
+     * 10:17:00
+     * 10:15:30
      */
     const validStartSlot =
       startTime.getUTCMinutes() % SLOT_MINUTES === 0 &&
@@ -189,7 +214,7 @@ export async function POST(req: Request, { params }: Props) {
     }
 
     /*
-     * 5. Không cho đặt quá khứ
+     * 7. Không đặt trong quá khứ.
      */
     const now = new Date();
 
@@ -205,7 +230,7 @@ export async function POST(req: Request, { params }: Props) {
     }
 
     /*
-     * 6. Chỉ đặt trước tối đa 2 ngày
+     * 8. Chỉ được đặt trước tối đa 2 ngày.
      */
     const maxBookingDate = new Date(
       now.getTime() + MAX_ADVANCE_DAYS * 24 * 60 * 60 * 1000,
@@ -223,7 +248,8 @@ export async function POST(req: Request, { params }: Props) {
     }
 
     /*
-     * 7. Xác định ngày theo giờ Việt Nam
+     * 9. Xác định ngày của booking
+     * theo timezone Việt Nam.
      */
     const startTimeInVietnam = new Date(
       startTime.getTime() + VIETNAM_OFFSET_MS,
@@ -235,26 +261,35 @@ export async function POST(req: Request, { params }: Props) {
 
     const day = startTimeInVietnam.getUTCDate();
 
+    /*
+     * 00:00 ngày booking theo giờ Việt Nam
+     * quy đổi về UTC.
+     */
     const dayStart = new Date(Date.UTC(year, month, day) - VIETNAM_OFFSET_MS);
 
+    /*
+     * 00:00 ngày hôm sau theo giờ Việt Nam.
+     */
     const dayEnd = new Date(Date.UTC(year, month, day + 1) - VIETNAM_OFFSET_MS);
 
     /*
-     * 8. Transaction
+     * 10. Transaction
      *
-     * Khóa cả User và Room.
+     * Thứ tự lock:
      *
-     * User lock:
-     * - chống vượt giới hạn booking/ngày
-     * - chống vượt giới hạn booking tương lai
-     * - kiểm tra ban một cách nhất quán
-     *
-     * Room lock:
-     * - chống double-booking cùng phòng
+     * User
+     *   ↓
+     * kiểm tra ban + quota
+     *   ↓
+     * Room
+     *   ↓
+     * kiểm tra overlap
+     *   ↓
+     * CREATE booking
      */
     const booking = await prisma.$transaction(async (tx) => {
       /*
-       * Khóa user trước.
+       * 10.1 Lock User
        *
        * Hai request đồng thời của cùng một
        * Student sẽ phải chạy lần lượt.
@@ -274,18 +309,24 @@ export async function POST(req: Request, { params }: Props) {
       const lockedUser = lockedUsers[0];
 
       if (!lockedUser) {
-        throw new Error("USER_NOT_FOUND");
+        throw new UserNotFoundError();
       }
 
       const transactionNow = new Date();
 
+      /*
+       * 10.2 Kiểm tra ban.
+       */
       if (lockedUser.bannedUntil && lockedUser.bannedUntil > transactionNow) {
         throw new UserBannedError(lockedUser.bannedUntil);
       }
 
       /*
-       * Kiểm tra giới hạn booking trong ngày
-       * SAU KHI đã khóa user.
+       * 10.3 Giới hạn booking/ngày.
+       *
+       * Giữ nguyên nghiệp vụ hiện tại:
+       * CANCELLED_BY_USER và NO_SHOW vẫn
+       * được tính vào giới hạn số lượt/ngày.
        */
       const bookingsOnSameDay = await tx.roomBooking.count({
         where: {
@@ -303,11 +344,13 @@ export async function POST(req: Request, { params }: Props) {
       }
 
       /*
-       * Kiểm tra số booking tương lai.
+       * 10.4 Tối đa 2 booking CONFIRMED
+       * trong tương lai.
        */
       const futureBookingCount = await tx.roomBooking.count({
         where: {
           userId: user.id,
+
           status: "CONFIRMED",
 
           startTime: {
@@ -321,14 +364,18 @@ export async function POST(req: Request, { params }: Props) {
       }
 
       /*
-       * Khóa phòng.
+       * 10.5 Lock Room
        *
-       * Tất cả request đặt cùng một phòng
-       * sẽ được serialize tại đây.
+       * API check-in cũng khóa row Room này.
+       *
+       * Nhờ vậy create booking và early
+       * check-in trên cùng một phòng không
+       * kiểm tra dữ liệu song song.
        */
       const lockedRooms = await tx.$queryRaw<
         Array<{
           id: string;
+
           isAvailable: number | boolean;
         }>
       >`
@@ -349,26 +396,71 @@ export async function POST(req: Request, { params }: Props) {
       }
 
       /*
-       * Hai khoảng thời gian trùng nhau khi:
+       * 10.6 Kiểm tra overlap.
        *
-       * newStart < existingEnd
-       * AND
-       * newEnd > existingStart
+       * Đây là phần quan trọng sau khi
+       * hệ thống hỗ trợ EARLY CHECK-IN.
+       *
+       * Thời điểm bắt đầu chiếm phòng thực tế:
+       *
+       * MIN(startTime, checkedInAt)
+       *
+       * Nếu chưa check-in:
+       * actualStart = startTime
+       *
+       * Nếu check-in sớm:
+       * actualStart = checkedInAt
+       *
+       *
+       * Booking tồn tại gây conflict nếu:
+       *
+       * existing.endTime > new.startTime
+       *
+       * VÀ
+       *
+       * (
+       *   existing.startTime < new.endTime
+       *   OR
+       *   existing.checkedInAt < new.endTime
+       * )
        */
       const overlapping = await tx.roomBooking.findFirst({
         where: {
           roomId,
+
           status: "CONFIRMED",
 
-          AND: [
+          /*
+           * Booking hiện tại phải chưa kết thúc
+           * trước lúc booking mới bắt đầu.
+           */
+          endTime: {
+            gt: startTime,
+          },
+
+          /*
+           * Một trong hai thời điểm bắt đầu
+           * chiếm phòng đã nằm trước endTime
+           * của booking mới.
+           */
+          OR: [
             {
               startTime: {
                 lt: endTime,
               },
             },
+
+            /*
+             * checkedInAt = null sẽ không match
+             * điều kiện < endTime.
+             *
+             * Nếu early check-in, điều kiện này
+             * bắt được phần thời gian phát sinh
+             * trước startTime ban đầu.
+             */
             {
-              endTime: {
-                gt: startTime,
+              checkedInAt: {
+                lt: endTime,
               },
             },
           ],
@@ -376,6 +468,9 @@ export async function POST(req: Request, { params }: Props) {
 
         select: {
           id: true,
+          startTime: true,
+          endTime: true,
+          checkedInAt: true,
         },
       });
 
@@ -384,17 +479,22 @@ export async function POST(req: Request, { params }: Props) {
       }
 
       /*
-       * Tạo booking
+       * 10.7 Create booking
        */
       return tx.roomBooking.create({
         data: {
           roomId,
           userId: user.id,
+
           startTime,
           endTime,
+
           status: "CONFIRMED",
         },
 
+        /*
+         * Chỉ trả những dữ liệu frontend cần.
+         */
         select: {
           id: true,
           roomId: true,
@@ -407,9 +507,13 @@ export async function POST(req: Request, { params }: Props) {
       });
     });
 
+    /*
+     * 11. Success
+     */
     return NextResponse.json(
       {
         message: "Đặt phòng thành công",
+
         booking,
       },
       {
@@ -418,12 +522,12 @@ export async function POST(req: Request, { params }: Props) {
     );
   } catch (error) {
     /*
-     * Double-booking
+     * Booking conflict.
      */
     if (error instanceof BookingConflictError) {
       return NextResponse.json(
         {
-          message: "Khoảng thời gian này đã có người đặt phòng.",
+          message: "Khoảng thời gian này đã có người sử dụng hoặc đặt phòng.",
         },
         {
           status: 409,
@@ -432,7 +536,7 @@ export async function POST(req: Request, { params }: Props) {
     }
 
     /*
-     * Room
+     * Room không tồn tại.
      */
     if (error instanceof RoomNotFoundError) {
       return NextResponse.json(
@@ -445,6 +549,9 @@ export async function POST(req: Request, { params }: Props) {
       );
     }
 
+    /*
+     * Room bị disable.
+     */
     if (error instanceof RoomUnavailableError) {
       return NextResponse.json(
         {
@@ -457,7 +564,21 @@ export async function POST(req: Request, { params }: Props) {
     }
 
     /*
-     * User ban
+     * User không tồn tại trong DB.
+     */
+    if (error instanceof UserNotFoundError) {
+      return NextResponse.json(
+        {
+          message: "Không tìm thấy người dùng",
+        },
+        {
+          status: 404,
+        },
+      );
+    }
+
+    /*
+     * User đang bị ban.
      */
     if (error instanceof UserBannedError) {
       return NextResponse.json(
@@ -476,7 +597,7 @@ export async function POST(req: Request, { params }: Props) {
     }
 
     /*
-     * Booking limits
+     * Quá giới hạn booking/ngày.
      */
     if (error instanceof DailyBookingLimitError) {
       return NextResponse.json(
@@ -490,6 +611,9 @@ export async function POST(req: Request, { params }: Props) {
       );
     }
 
+    /*
+     * Quá giới hạn booking tương lai.
+     */
     if (error instanceof FutureBookingLimitError) {
       return NextResponse.json(
         {
@@ -498,17 +622,6 @@ export async function POST(req: Request, { params }: Props) {
         },
         {
           status: 409,
-        },
-      );
-    }
-
-    if (error instanceof Error && error.message === "USER_NOT_FOUND") {
-      return NextResponse.json(
-        {
-          message: "Không tìm thấy người dùng",
-        },
-        {
-          status: 404,
         },
       );
     }
