@@ -9,15 +9,17 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-import { UploadDropzone } from "@/lib/uploadthing";
+import { supabase } from "@/lib/supabase-client";
 
 type UploadedFile = {
-  url: string;
+  storagePath: string;
   name: string;
   size: number;
 };
 
 export function DocumentUploadForm() {
+  const [uploading, setUploading] =
+  useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
 
@@ -38,11 +40,96 @@ export function DocumentUploadForm() {
     useState<UploadedFile | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
+  
+  async function handleFileUpload(file: File) {
+    const MAX_FILE_SIZE = 8 * 1024 * 1024;
+
+    if (
+      file.type !== "application/pdf" ||
+      !file.name.toLowerCase().endsWith(".pdf")
+    ) {
+      alert("Chỉ chấp nhận file PDF.");
+      return;
+    }
+
+    if (file.size === 0 || file.size > MAX_FILE_SIZE) {
+      alert("File PDF phải có dung lượng từ 1 byte đến 8 MB.");
+      return;
+    }
+
+    try {
+      setUploading(true);
+
+      // Bước 1: Xin signed upload token từ backend.
+      const response = await fetch(
+        "/api/storage/documents/upload-url",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            fileName: file.name,
+            fileSize: file.size,
+            fileType: file.type,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message || "Không thể tạo đường dẫn upload"
+        );
+      }
+
+      const { path, token } = data as {
+        path: string;
+        token: string;
+      };
+
+      if (!path || !token) {
+        throw new Error("Thông tin upload không hợp lệ");
+      }
+
+      // Bước 2: Upload PDF vào private bucket.
+      const { error } = await supabase.storage
+        .from("documents")
+        .uploadToSignedUrl(path, token, file, {
+          contentType: "application/pdf",
+        });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      // Bước 3: Lưu thông tin file để gửi duyệt.
+      setUploadedFile({
+        storagePath: path,
+        name: file.name,
+        size: file.size,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Có lỗi xảy ra";
+
+      alert(`Upload thất bại: ${message}`);
+    } finally {
+      setUploading(false);
+    }
+  }
 
   async function handleSubmit(
     e: React.FormEvent<HTMLFormElement>,
   ) {
     e.preventDefault();
+
+    if (uploading || submitting) {
+      return;
+    }
 
     if (!uploadedFile) {
       alert("Vui lòng tải lên file PDF.");
@@ -73,7 +160,7 @@ export function DocumentUploadForm() {
           subjectCode,
           subjectName,
 
-          fileUrl: uploadedFile.url,
+          storagePath: uploadedFile.storagePath,
           fileName: uploadedFile.name,
           fileSize: uploadedFile.size,
 
@@ -296,44 +383,44 @@ export function DocumentUploadForm() {
           title="Tệp PDF"
           description="Chỉ chấp nhận một file PDF cho mỗi tài liệu."
         />
-
         <div className="mt-5 min-w-0 sm:mt-6">
           {!uploadedFile ? (
             <div className="max-w-full overflow-hidden">
-              <UploadDropzone
-                endpoint="documentUploader"
-                config={{
-                  mode: "auto",
-                }}
-                onClientUploadComplete={(res) => {
-                  const file = res?.[0];
+            <label
+              className={`flex min-h-44 flex-col items-center justify-center
+                rounded-xl border-2 border-dashed p-6 text-center transition
+                ${
+                  uploading
+                    ? "cursor-not-allowed bg-gray-50 opacity-60"
+                    : "cursor-pointer hover:bg-gray-50"
+                }`}
+            >
+              <FileUp className="mb-3 h-8 w-8 text-gray-500" />
 
-                  if (!file) {
-                    return;
+              <p className="font-medium">
+                {uploading ? "Đang tải PDF..." : "Chọn file PDF"}
+              </p>
+
+              <p className="mt-1 text-sm text-muted-foreground">
+                Định dạng PDF, tối đa 8 MB
+              </p>
+
+              <input
+                type="file"
+                accept=".pdf,application/pdf"
+                disabled={uploading || submitting}
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.currentTarget.files?.[0];
+
+                  if (file) {
+                    void handleFileUpload(file);
                   }
 
-                  const uploaded = {
-                    url:
-                      file.serverData?.url ??
-                      file.url,
-
-                    name:
-                      file.serverData?.name ??
-                      file.name,
-
-                    size:
-                      file.serverData?.size ??
-                      file.size,
-                  };
-
-                  setUploadedFile(uploaded);
-                }}
-                onUploadError={(error) => {
-                  alert(
-                    `Upload thất bại: ${error.message}`,
-                  );
+                  e.currentTarget.value = "";
                 }}
               />
+            </label>
             </div>
           ) : (
             <div className="flex flex-col gap-4 rounded-lg border border-green-200 bg-green-50 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -403,6 +490,7 @@ export function DocumentUploadForm() {
           type="submit"
           disabled={
             submitting ||
+            uploading ||
             !uploadedFile ||
             !copyrightDeclared
           }

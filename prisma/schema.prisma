@@ -61,9 +61,10 @@ model Document {
   subjectCode String
   subjectName String
 
-  fileUrl  String  @db.Text
-  fileName String?
-  fileSize Int?
+  fileUrl     String? @db.Text
+  storagePath String? @unique
+  fileName    String?
+  fileSize    Int?
 
   status DocumentStatus @default(PENDING)
 
