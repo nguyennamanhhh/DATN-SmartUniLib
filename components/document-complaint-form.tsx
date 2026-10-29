@@ -50,11 +50,12 @@ export function DocumentComplaintForm({
       }
 
       alert(
-        "Khiếu nại đã được gửi. Tài liệu đang được xem xét."
+        "Khiếu nại đã được tiếp nhận. Tài liệu sẽ tạm ẩn trong thời gian xem xét."
       );
 
       setReason("");
-      router.refresh();
+
+      router.replace("/documents");
     } catch (error) {
       const message =
         error instanceof Error

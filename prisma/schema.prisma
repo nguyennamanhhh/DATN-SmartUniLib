@@ -34,6 +34,7 @@ model User {
   complaintsCreated  DocumentComplaint[] @relation("ComplaintCreator")
   complaintsResolved DocumentComplaint[] @relation("ComplaintResolver")
   roomBookings       RoomBooking[]
+  storageUploads     StorageUpload[]
 
   @@index([studentId])
   @@map("users")
@@ -51,6 +52,13 @@ enum CopyrightType {
   SELF_CREATED
   AUTHOR_PERMISSION
   OPEN_SOURCE
+}
+
+enum StorageUploadStatus {
+  PENDING
+  REGISTERED
+  DELETING
+  DELETED
 }
 
 model Document {
@@ -128,6 +136,32 @@ model DocumentComplaint {
   @@index([complainantId])
   @@index([status])
   @@map("document_complaints")
+}
+
+model StorageUpload {
+  id String @id @default(uuid())
+
+  storagePath String @unique
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  fileName String
+  fileSize Int
+
+  status StorageUploadStatus @default(PENDING)
+
+  documentId String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  registeredAt DateTime?
+  deletedAt    DateTime?
+
+  @@index([userId])
+  @@index([status, createdAt])
+  @@map("storage_uploads")
 }
 
 enum DocumentAuditAction {

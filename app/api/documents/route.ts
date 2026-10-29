@@ -5,6 +5,8 @@ import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
+export const runtime = "nodejs";
+
 const BUCKET = "documents";
 const MAX_FILE_SIZE = 8 * 1024 * 1024;
 
@@ -18,6 +20,13 @@ type CopyrightType = (typeof COPYRIGHT_TYPES)[number];
 
 const PDF_PATH_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.pdf$/i;
+
+class UploadConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UploadConflictError";
+  }
+}
 
 function errorResponse(message: string, status: number) {
   return NextResponse.json({ message }, { status });
@@ -173,6 +182,45 @@ export async function POST(req: Request) {
       return errorResponse("Vui lòng cung cấp minh chứng cho phép", 400);
     }
 
+    const uploadSession = await prisma.storageUpload.findUnique({
+      where: {
+        storagePath,
+      },
+      select: {
+        id: true,
+        userId: true,
+        fileName: true,
+        fileSize: true,
+        status: true,
+        documentId: true,
+      },
+    });
+
+    if (!uploadSession) {
+      return errorResponse("Không tìm thấy phiên upload hợp lệ", 400);
+    }
+
+    if (uploadSession.userId !== user.id) {
+      return errorResponse("Bạn không có quyền sử dụng phiên upload này", 403);
+    }
+
+    if (
+      uploadSession.status !== "PENDING" ||
+      uploadSession.documentId !== null
+    ) {
+      return errorResponse(
+        "Phiên upload đã được xử lý hoặc không còn khả dụng",
+        409,
+      );
+    }
+
+    if (
+      uploadSession.fileName !== fileName.trim() ||
+      uploadSession.fileSize !== fileSize
+    ) {
+      return errorResponse("Thông tin file không khớp với phiên upload", 400);
+    }
+
     const existingDocument = await prisma.document.findUnique({
       where: {
         storagePath,
@@ -258,6 +306,25 @@ export async function POST(req: Request) {
     }
 
     const document = await prisma.$transaction(async (tx) => {
+      const claim = await tx.storageUpload.updateMany({
+        where: {
+          id: uploadSession.id,
+          userId: user.id,
+          storagePath,
+          status: "PENDING",
+          documentId: null,
+        },
+        data: {
+          status: "REGISTERED",
+        },
+      });
+
+      if (claim.count !== 1) {
+        throw new UploadConflictError(
+          "Phiên upload đã được xử lý bởi yêu cầu khác",
+        );
+      }
+
       const newDocument = await tx.document.create({
         data: {
           title: title.trim(),
@@ -290,6 +357,16 @@ export async function POST(req: Request) {
         },
       });
 
+      await tx.storageUpload.update({
+        where: {
+          id: uploadSession.id,
+        },
+        data: {
+          documentId: newDocument.id,
+          registeredAt: new Date(),
+        },
+      });
+
       return newDocument;
     });
 
@@ -302,11 +379,21 @@ export async function POST(req: Request) {
       { status: 201 },
     );
   } catch (error) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
-      return errorResponse("File này đã được sử dụng cho một tài liệu", 409);
+    if (error instanceof UploadConflictError) {
+      return errorResponse(error.message, 409);
+    }
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2002") {
+        return errorResponse("File này đã được sử dụng cho một tài liệu", 409);
+      }
+
+      if (error.code === "P2034") {
+        return errorResponse(
+          "Có yêu cầu đồng thời đang xử lý. Vui lòng thử lại.",
+          409,
+        );
+      }
     }
 
     console.error("Create document error:", error);
