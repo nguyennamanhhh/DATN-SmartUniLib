@@ -35,6 +35,7 @@ model User {
   complaintsResolved DocumentComplaint[] @relation("ComplaintResolver")
   roomBookings       RoomBooking[]
   storageUploads     StorageUpload[]
+  storageCleanupLogs StorageCleanupLog[] @relation("StorageCleanupActor")
 
   @@index([studentId])
   @@map("users")
@@ -239,4 +240,33 @@ model RoomBooking {
   @@index([userId])
   @@index([status])
   @@map("room_bookings")
+}
+
+enum StorageCleanupAction {
+  DELETE_REQUESTED
+  DELETE_SUCCEEDED
+  DELETE_FAILED
+  RECONCILED
+}
+
+model StorageCleanupLog {
+  id String @id @default(uuid())
+
+  storagePath String
+
+  actorId String
+  actor   User   @relation("StorageCleanupActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  action StorageCleanupAction
+
+  uploadStatus StorageUploadStatus?
+
+  message String? @db.Text
+
+  createdAt DateTime @default(now())
+
+  @@index([storagePath, createdAt])
+  @@index([actorId])
+  @@index([action])
+  @@map("storage_cleanup_logs")
 }
