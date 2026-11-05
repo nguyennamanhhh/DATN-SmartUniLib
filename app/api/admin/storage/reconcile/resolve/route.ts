@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isMissingStorageObject } from "@/lib/storage-reconciliation";
 
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
@@ -33,20 +34,6 @@ function isValidStoragePath(path: string): boolean {
     parts.length === 2 &&
     /^user_[A-Za-z0-9_-]+$/.test(parts[0]) &&
     PDF_NAME_PATTERN.test(parts[1])
-  );
-}
-
-function isMissingStorageObject(error: {
-  statusCode?: string;
-  message: string;
-}): boolean {
-  if (error.statusCode === "NoSuchKey") {
-    return true;
-  }
-
-  return (
-    error.statusCode === "404" &&
-    error.message.trim().toLowerCase() === "object not found"
   );
 }
 

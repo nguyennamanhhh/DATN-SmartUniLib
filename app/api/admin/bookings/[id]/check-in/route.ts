@@ -122,11 +122,17 @@ export async function POST(_req: Request, { params }: Props) {
 
     const now = new Date();
 
-    /*
-     * Deadline:
-     *
-     * startTime + 15 phút.
-     */
+    if (now >= booking.endTime) {
+      return NextResponse.json(
+        {
+          message: "Lịch đặt đã kết thúc, không thể check-in.",
+        },
+        {
+          status: 409,
+        },
+      );
+    }
+
     const checkInDeadline = new Date(
       booking.startTime.getTime() + CHECK_IN_GRACE_MINUTES * 60 * 1000,
     );
@@ -211,9 +217,10 @@ export async function POST(_req: Request, { params }: Props) {
 
       const transactionNow = new Date();
 
-      /*
-       * Kiểm tra lại deadline trong transaction.
-       */
+      if (transactionNow >= currentBooking.endTime) {
+        throw new BookingCheckInConflictError();
+      }
+
       const transactionDeadline = new Date(
         currentBooking.startTime.getTime() + CHECK_IN_GRACE_MINUTES * 60 * 1000,
       );

@@ -1,3 +1,4 @@
+
 import Link from "next/link";
 import {
   CalendarCheck,
@@ -19,6 +20,7 @@ import { EmptyState } from "@/components/empty-state";
 type Props = {
   searchParams: Promise<{
     status?: string;
+    date?: string;
   }>;
 };
 
@@ -28,6 +30,61 @@ const allowedStatuses = [
   "NO_SHOW",
 ] as const;
 
+type BookingStatusFilter =
+  | (typeof allowedStatuses)[number]
+  | "ALL";
+
+const VIETNAM_OFFSET_MS = 7 * 60 * 60 * 1000;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+function getTodayVietnam(): string {
+  return new Date(Date.now() + VIETNAM_OFFSET_MS)
+    .toISOString()
+    .slice(0, 10);
+}
+
+function isValidDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+
+  return (
+    !Number.isNaN(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value
+  );
+}
+
+function getVietnamDayRange(date: string) {
+  const utcMidnight = new Date(`${date}T00:00:00.000Z`);
+
+  const dayStart = new Date(
+    utcMidnight.getTime() - VIETNAM_OFFSET_MS,
+  );
+
+  const dayEnd = new Date(
+    dayStart.getTime() + ONE_DAY_MS,
+  );
+
+  return { dayStart, dayEnd };
+}
+
+function getBookingsUrl(
+  date: string,
+  status: BookingStatusFilter,
+): string {
+  const params = new URLSearchParams();
+
+  params.set("date", date);
+
+  if (status !== "ALL") {
+    params.set("status", status);
+  }
+
+  return `/admin/bookings?${params.toString()}`;
+}
+
 export default async function AdminBookingsPage({
   searchParams,
 }: Props) {
@@ -35,24 +92,48 @@ export default async function AdminBookingsPage({
 
   const params = await searchParams;
 
-  const status =
+  const status: BookingStatusFilter =
     params.status &&
     allowedStatuses.includes(
       params.status as (typeof allowedStatuses)[number],
     )
-      ? params.status
+      ? (params.status as (typeof allowedStatuses)[number])
       : "ALL";
 
+  const todayVietnam = getTodayVietnam();
+
+  const selectedDate =
+    params.date === "all"
+      ? "all"
+      : params.date && isValidDate(params.date)
+        ? params.date
+        : todayVietnam;
+
+  const dateRange =
+    selectedDate === "all"
+      ? null
+      : getVietnamDayRange(selectedDate);
+
   const bookings = await prisma.roomBooking.findMany({
-    where:
-      status === "ALL"
-        ? {}
-        : {
-            status: status as
-              | "CONFIRMED"
-              | "CANCELLED_BY_USER"
-              | "NO_SHOW",
-          },
+    where: {
+      ...(status !== "ALL"
+        ? {
+            status,
+          }
+        : {}),
+
+      ...(dateRange
+        ? {
+            startTime: {
+              lt: dateRange.dayEnd,
+            },
+
+            endTime: {
+              gt: dateRange.dayStart,
+            },
+          }
+        : {}),
+    },
 
     include: {
       room: true,
@@ -60,7 +141,7 @@ export default async function AdminBookingsPage({
     },
 
     orderBy: {
-      startTime: "desc",
+      startTime: "asc",
     },
   });
 
@@ -73,38 +154,119 @@ export default async function AdminBookingsPage({
           action={<ProcessNoShowsButton />}
         />
 
-        {/* Bộ lọc */}
+        {/* Chọn ngày xem lịch */}
+        <section className="rounded-xl border bg-white p-4 sm:p-5">
+          <form
+            method="GET"
+            action="/admin/bookings"
+            className="flex flex-wrap items-end gap-3"
+          >
+            <div className="min-w-0">
+              <label
+                htmlFor="booking-date"
+                className="mb-2 block text-sm font-medium"
+              >
+                Chọn ngày xem lịch
+              </label>
+
+              <input
+                id="booking-date"
+                type="date"
+                name="date"
+                defaultValue={
+                  selectedDate === "all"
+                    ? todayVietnam
+                    : selectedDate
+                }
+                required
+                className="w-full rounded-lg border px-3 py-2 text-sm sm:w-auto"
+              />
+            </div>
+
+            {/* Giữ trạng thái khi chọn ngày khác */}
+            {status !== "ALL" && (
+              <input
+                type="hidden"
+                name="status"
+                value={status}
+              />
+            )}
+
+            <button
+              type="submit"
+              className="inline-flex items-center justify-center rounded-lg bg-black px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-800"
+            >
+              Xem lịch
+            </button>
+
+            <Link
+              href={getBookingsUrl("all", status)}
+              className="inline-flex items-center justify-center rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-gray-50"
+            >
+              Xem tất cả các ngày
+            </Link>
+
+            <Link
+              href={getBookingsUrl(todayVietnam, status)}
+              className="inline-flex items-center justify-center rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-gray-50"
+            >
+              Hôm nay
+            </Link>
+          </form>
+
+          <p className="mt-3 text-sm text-muted-foreground">
+            {selectedDate === "all"
+              ? "Đang hiển thị lịch đặt của tất cả các ngày."
+              : `Đang xem lịch ngày ${formatDateOnly(selectedDate)}.`}
+          </p>
+        </section>
+
+        {/* Bộ lọc trạng thái */}
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
           <FilterLink
-            href="/admin/bookings"
+            href={getBookingsUrl(selectedDate, "ALL")}
             label="Tất cả"
             active={status === "ALL"}
           />
 
           <FilterLink
-            href="/admin/bookings?status=CONFIRMED"
+            href={getBookingsUrl(selectedDate, "CONFIRMED")}
             label="Đã xác nhận"
             active={status === "CONFIRMED"}
           />
 
           <FilterLink
-            href="/admin/bookings?status=CANCELLED_BY_USER"
+            href={getBookingsUrl(
+              selectedDate,
+              "CANCELLED_BY_USER",
+            )}
             label="Đã hủy"
             active={status === "CANCELLED_BY_USER"}
           />
 
           <FilterLink
-            href="/admin/bookings?status=NO_SHOW"
+            href={getBookingsUrl(selectedDate, "NO_SHOW")}
             label="No-show"
             active={status === "NO_SHOW"}
           />
         </div>
 
+        {/* Số lượng booking */}
+        <div className="rounded-xl border bg-white px-4 py-3">
+          <p className="text-sm text-muted-foreground">
+            Số lịch đặt phù hợp:{" "}
+            <span className="font-semibold text-foreground">
+              {bookings.length}
+            </span>
+          </p>
+        </div>
+
+        {/* Danh sách booking */}
         {bookings.length === 0 ? (
           <EmptyState
             icon={CalendarCheck}
             title="Không có lịch đặt phòng"
-            description="Không có booking nào phù hợp với bộ lọc hiện tại."
+            description="Không có booking nào phù hợp với ngày và trạng thái đã chọn."
           />
         ) : (
           <div className="space-y-4">
@@ -190,8 +352,7 @@ export default async function AdminBookingsPage({
                       <Clock3 className="h-4 w-4 shrink-0 text-gray-400" />
                     </div>
 
-                    {booking.status ===
-                      "CONFIRMED" && (
+                    {booking.status === "CONFIRMED" && (
                       <div className="mt-4 border-t pt-4">
                         <AdminBookingActions
                           bookingId={booking.id}
@@ -263,12 +424,19 @@ function InfoRow({
   );
 }
 
-function formatDateTime(date: Date) {
+function formatDateTime(date: Date): string {
   return date.toLocaleString("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh",
     hour: "2-digit",
     minute: "2-digit",
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
   });
+}
+
+function formatDateOnly(value: string): string {
+  const [year, month, day] = value.split("-");
+
+  return `${day}/${month}/${year}`;
 }

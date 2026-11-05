@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { isMissingStorageObject } from "@/lib/storage-reconciliation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,29 +21,6 @@ function respond(message: string, status: number) {
       },
     },
   );
-}
-
-function isMissingStorageObject(error: {
-  statusCode?: string;
-  message: string;
-}): boolean {
-  // Mã lỗi Storage mới.
-  if (error.statusCode === "NoSuchKey") {
-    return true;
-  }
-
-  // Một số phiên bản Storage cũ trả về
-  // statusCode = "404" và thông báo này.
-  if (
-    error.statusCode === "404" &&
-    error.message.trim().toLowerCase() === "object not found"
-  ) {
-    return true;
-  }
-
-  // Các lỗi khác, kể cả NoSuchBucket,
-  // không được xem là PDF đã bị xóa.
-  return false;
 }
 
 export async function GET() {
