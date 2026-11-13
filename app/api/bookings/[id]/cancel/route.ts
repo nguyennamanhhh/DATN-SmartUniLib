@@ -104,7 +104,16 @@ export async function POST(req: Request, { params }: Props) {
       },
     );
 
-    return NextResponse.redirect(new URL("/bookings", req.url));
+    if (req.headers.get("accept")?.includes("application/json")) {
+      return NextResponse.json({
+        success: true,
+        message: "Hủy lịch đặt phòng thành công.",
+      });
+    }
+
+    return NextResponse.redirect(new URL("/bookings", req.url), {
+      status: 303,
+    });
   } catch (error) {
     if (error instanceof BookingCancelConflictError) {
       return NextResponse.json(

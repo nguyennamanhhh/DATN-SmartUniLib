@@ -1,4 +1,3 @@
-
 import Link from "next/link";
 import {
   CalendarCheck,
@@ -21,6 +20,7 @@ type Props = {
   searchParams: Promise<{
     status?: string;
     date?: string;
+    roomId?: string;
   }>;
 };
 
@@ -73,6 +73,7 @@ function getVietnamDayRange(date: string) {
 function getBookingsUrl(
   date: string,
   status: BookingStatusFilter,
+  roomId: string,
 ): string {
   const params = new URLSearchParams();
 
@@ -80,6 +81,10 @@ function getBookingsUrl(
 
   if (status !== "ALL") {
     params.set("status", status);
+  }
+
+  if (roomId !== "all") {
+    params.set("roomId", roomId);
   }
 
   return `/admin/bookings?${params.toString()}`;
@@ -114,6 +119,22 @@ export default async function AdminBookingsPage({
       ? null
       : getVietnamDayRange(selectedDate);
 
+  const rooms = await prisma.room.findMany({
+    select: {
+      id: true,
+      name: true,
+    },
+    orderBy: {
+      name: "asc",
+    },
+  });
+
+  const selectedRoomId =
+    params.roomId &&
+    rooms.some((room) => room.id === params.roomId)
+      ? params.roomId
+      : "all";
+
   const bookings = await prisma.roomBooking.findMany({
     where: {
       ...(status !== "ALL"
@@ -132,6 +153,10 @@ export default async function AdminBookingsPage({
               gt: dateRange.dayStart,
             },
           }
+        : {}),
+
+      ...(selectedRoomId !== "all"
+        ? { roomId: selectedRoomId }
         : {}),
     },
 
@@ -183,6 +208,30 @@ export default async function AdminBookingsPage({
               />
             </div>
 
+            {/* Lọc theo phòng học */}
+            <div className="min-w-0">
+              <label
+                htmlFor="booking-room"
+                className="mb-2 block text-sm font-medium"
+              >
+                Chọn phòng học
+              </label>
+
+              <select
+                id="booking-room"
+                name="roomId"
+                defaultValue={selectedRoomId}
+                className="w-full rounded-lg border bg-white px-3 py-2 text-sm sm:w-auto"
+              >
+                <option value="all">Tất cả phòng</option>
+                {rooms.map((room) => (
+                  <option key={room.id} value={room.id}>
+                    {room.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Giữ trạng thái khi chọn ngày khác */}
             {status !== "ALL" && (
               <input
@@ -200,14 +249,14 @@ export default async function AdminBookingsPage({
             </button>
 
             <Link
-              href={getBookingsUrl("all", status)}
+              href={getBookingsUrl("all", status, selectedRoomId)}
               className="inline-flex items-center justify-center rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-gray-50"
             >
               Xem tất cả các ngày
             </Link>
 
             <Link
-              href={getBookingsUrl(todayVietnam, status)}
+              href={getBookingsUrl(todayVietnam, status, selectedRoomId)}
               className="inline-flex items-center justify-center rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-gray-50"
             >
               Hôm nay
@@ -224,13 +273,13 @@ export default async function AdminBookingsPage({
         {/* Bộ lọc trạng thái */}
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
           <FilterLink
-            href={getBookingsUrl(selectedDate, "ALL")}
+            href={getBookingsUrl(selectedDate, "ALL", selectedRoomId)}
             label="Tất cả"
             active={status === "ALL"}
           />
 
           <FilterLink
-            href={getBookingsUrl(selectedDate, "CONFIRMED")}
+            href={getBookingsUrl(selectedDate, "CONFIRMED", selectedRoomId)}
             label="Đã xác nhận"
             active={status === "CONFIRMED"}
           />
@@ -239,13 +288,14 @@ export default async function AdminBookingsPage({
             href={getBookingsUrl(
               selectedDate,
               "CANCELLED_BY_USER",
+              selectedRoomId,
             )}
             label="Đã hủy"
             active={status === "CANCELLED_BY_USER"}
           />
 
           <FilterLink
-            href={getBookingsUrl(selectedDate, "NO_SHOW")}
+            href={getBookingsUrl(selectedDate, "NO_SHOW", selectedRoomId)}
             label="No-show"
             active={status === "NO_SHOW"}
           />
@@ -266,7 +316,7 @@ export default async function AdminBookingsPage({
           <EmptyState
             icon={CalendarCheck}
             title="Không có lịch đặt phòng"
-            description="Không có booking nào phù hợp với ngày và trạng thái đã chọn."
+            description="Không có booking nào phù hợp với ngày, phòng và trạng thái đã chọn."
           />
         ) : (
           <div className="space-y-4">

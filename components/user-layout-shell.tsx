@@ -1,7 +1,9 @@
+
 "use client";
 
-import { useState } from "react";
-import { Menu, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { BookOpen, Menu } from "lucide-react";
 
 import { UserSidebar } from "@/components/user-sidebar";
 
@@ -14,75 +16,81 @@ export function UserLayoutShell({
   children,
   header,
 }: UserLayoutShellProps) {
-  const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-return (
-  <div className="flex min-h-screen bg-gray-50">
-    {/* Sidebar desktop */}
-    <div className="hidden md:block">
-      <UserSidebar
-        collapsed={collapsed}
-        onToggle={() =>
-          setCollapsed((value) => !value)
-        }
-      />
-    </div>
+  // Khóa cuộn nền khi menu mobile mở.
+  useEffect(() => {
+    if (!mobileOpen) return;
 
-    {/* Overlay mobile */}
-    {mobileOpen && (
-      <button
-        type="button"
-        aria-label="Đóng menu"
-        onClick={() => setMobileOpen(false)}
-        className="fixed inset-0 z-40 bg-black/40 md:hidden"
-      />
-    )}
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
 
-    {/* Sidebar mobile */}
-    <div
-      className={`fixed inset-y-0 left-0 z-50 w-64 transform bg-white transition-transform duration-300 md:hidden ${
-        mobileOpen
-          ? "translate-x-0"
-          : "-translate-x-full"
-      }`}
-    >
-      <UserSidebar
-        collapsed={false}
-        mobile
-        onToggle={() => setMobileOpen(false)}
-        onNavigate={() => setMobileOpen(false)}
-      />
-    </div>
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileOpen]);
 
-    {/* Nội dung */}
-    <div className="min-w-0 flex-1">
-      {/* Mobile topbar */}
-      <div className="flex h-16 items-center border-b bg-white px-4 md:hidden">
-        <button
-          type="button"
-          onClick={() =>
-            setMobileOpen((value) => !value)
-          }
-          className="flex h-10 w-10 items-center justify-center rounded-lg border bg-white"
-          aria-label="Mở menu"
-        >
-          {mobileOpen ? (
-            <X className="h-5 w-5" />
-          ) : (
-            <Menu className="h-5 w-5" />
-          )}
-        </button>
-
-        <span className="ml-3 font-semibold">
-          SmartUniLib
-        </span>
-      </div>
-
+  return (
+    <div className="flex min-h-screen flex-col bg-[#F5F7FB]">
+      {/* Navbar desktop được truyền từ UserLayout */}
       {header}
 
-      <div>{children}</div>
+      {/* Navbar mobile */}
+      <div className="sticky top-0 z-30 flex h-16 items-center border-b border-blue-800 bg-[#1254A5] px-4 text-white shadow-sm md:hidden">
+        <button
+          type="button"
+          aria-label="Mở menu"
+          aria-expanded={mobileOpen}
+          aria-controls="user-mobile-navigation"
+          onClick={() => setMobileOpen(true)}
+          className="flex h-10 w-10 items-center justify-center rounded-lg transition hover:bg-white/15"
+        >
+          <Menu className="h-6 w-6" />
+        </button>
+
+        <Link
+          href="/dashboard"
+          className="ml-3 flex items-center gap-2 font-bold"
+        >
+          <BookOpen className="h-5 w-5" />
+          SmartUniLib
+        </Link>
+      </div>
+
+      {/* Lớp phủ khi mở menu mobile */}
+      {mobileOpen && (
+        <button
+          type="button"
+          aria-label="Đóng menu"
+          onClick={() => setMobileOpen(false)}
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+        />
+      )}
+
+      {/* Sidebar mobile */}
+      <div
+        id="user-mobile-navigation"
+        aria-hidden={!mobileOpen}
+        className={`fixed inset-y-0 left-0 z-50 w-64 transform bg-white shadow-xl transition-transform duration-300 md:hidden ${
+          mobileOpen
+            ? "translate-x-0"
+            : "-translate-x-full"
+        }`}
+      >
+        {mobileOpen && (
+          <UserSidebar
+            collapsed={false}
+            mobile
+            onToggle={() => setMobileOpen(false)}
+            onNavigate={() => setMobileOpen(false)}
+          />
+        )}
+      </div>
+
+      {/* Nội dung trang */}
+      <div className="min-w-0 flex-1">
+        {children}
+      </div>
     </div>
-  </div>
-);
+  );
 }
