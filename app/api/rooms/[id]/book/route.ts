@@ -20,6 +20,7 @@ const MAX_FUTURE_BOOKINGS = 2;
 
 const VIETNAM_OFFSET_MS = 7 * 60 * 60 * 1000;
 
+class BookingTimeExpiredError extends Error {}
 class BookingConflictError extends Error {}
 
 class RoomNotFoundError extends Error {}
@@ -479,6 +480,25 @@ export async function POST(req: Request, { params }: Props) {
       }
 
       /*
+       * Kiểm tra lại thời gian ngay trước khi tạo booking.
+       * Tránh trường hợp request phải chờ khóa transaction
+       * và giờ bắt đầu đã trôi qua.
+       */
+      const createNow = new Date();
+
+      if (startTime <= createNow) {
+        throw new BookingTimeExpiredError();
+      }
+
+      const latestAllowedStart = new Date(
+        createNow.getTime() + MAX_ADVANCE_DAYS * 24 * 60 * 60 * 1000,
+      );
+
+      if (startTime > latestAllowedStart) {
+        throw new BookingTimeExpiredError();
+      }
+
+      /*
        * 10.7 Create booking
        */
       return tx.roomBooking.create({
@@ -623,6 +643,16 @@ export async function POST(req: Request, { params }: Props) {
         {
           status: 409,
         },
+      );
+    }
+
+    if (error instanceof BookingTimeExpiredError) {
+      return NextResponse.json(
+        {
+          message:
+            "Thời gian đặt phòng không còn hợp lệ. Vui lòng chọn lại khung giờ.",
+        },
+        { status: 409 },
       );
     }
 

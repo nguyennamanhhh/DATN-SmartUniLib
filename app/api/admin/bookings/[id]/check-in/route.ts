@@ -10,7 +10,7 @@ type Props = {
 };
 
 const CHECK_IN_GRACE_MINUTES = 15;
-
+const MAX_EARLY_CHECK_IN_MINUTES = 30;
 class BookingCheckInConflictError extends Error {}
 
 class EarlyCheckInBlockedError extends Error {}
@@ -122,6 +122,21 @@ export async function POST(_req: Request, { params }: Props) {
 
     const now = new Date();
 
+    const earliestCheckIn = new Date(
+      booking.startTime.getTime() - MAX_EARLY_CHECK_IN_MINUTES * 60 * 1000,
+    );
+
+    if (now < earliestCheckIn) {
+      return NextResponse.json(
+        {
+          message: "Chỉ được check-in sớm tối đa 30 phút trước giờ bắt đầu.",
+        },
+        {
+          status: 409,
+        },
+      );
+    }
+
     if (now >= booking.endTime) {
       return NextResponse.json(
         {
@@ -216,6 +231,15 @@ export async function POST(_req: Request, { params }: Props) {
       }
 
       const transactionNow = new Date();
+
+      const earliestTransactionCheckIn = new Date(
+        currentBooking.startTime.getTime() -
+          MAX_EARLY_CHECK_IN_MINUTES * 60 * 1000,
+      );
+
+      if (transactionNow < earliestTransactionCheckIn) {
+        throw new EarlyCheckInBlockedError();
+      }
 
       if (transactionNow >= currentBooking.endTime) {
         throw new BookingCheckInConflictError();

@@ -15,6 +15,27 @@ const SIGNED_URL_EXPIRES_IN = 300; // 5 phút
 
 const STAFF_ROLES = ["ADMIN", "LIBRARIAN"];
 
+const PDF_FILE_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.pdf$/i;
+
+function isValidStoragePath(path: string): boolean {
+  const parts = path.split("/");
+
+  if (parts.length !== 2) {
+    return false;
+  }
+
+  const [userId, fileName] = parts;
+
+  return (
+    userId.length > 0 &&
+    userId !== "." &&
+    userId !== ".." &&
+    !userId.includes("\\") &&
+    PDF_FILE_PATTERN.test(fileName)
+  );
+}
+
 /**
  * Chỉ hỗ trợ URL UploadThing cũ.
  * Không redirect tới URL bất kỳ từ database.
@@ -93,6 +114,15 @@ export async function GET(_req: Request, { params }: Props) {
       );
     }
 
+    if (document.status === "REMOVED") {
+      return NextResponse.json(
+        {
+          message: "Tài liệu đã bị gỡ bỏ và không còn được phép tải xuống.",
+        },
+        { status: 403 },
+      );
+    }
+
     // 4. Authorization
     const isStaff = STAFF_ROLES.includes(user.role);
 
@@ -106,7 +136,19 @@ export async function GET(_req: Request, { params }: Props) {
     }
 
     // 5. Tài liệu mới: Supabase private Storage
+
     if (document.storagePath) {
+      if (!isValidStoragePath(document.storagePath)) {
+        console.error("Invalid document storage path:", document.id);
+
+        return NextResponse.json(
+          {
+            message: "Đường dẫn lưu trữ PDF không hợp lệ",
+          },
+          { status: 500 },
+        );
+      }
+
       const { data, error } = await supabaseAdmin.storage
         .from(BUCKET)
         .createSignedUrl(document.storagePath, SIGNED_URL_EXPIRES_IN);

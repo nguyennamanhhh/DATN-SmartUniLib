@@ -79,14 +79,10 @@ export async function POST(req: Request, { params }: Props) {
       );
     }
 
-    if (!body || typeof body !== "object") {
+    if (body === null || typeof body !== "object" || Array.isArray(body)) {
       return NextResponse.json(
-        {
-          message: "Dữ liệu gửi lên không hợp lệ",
-        },
-        {
-          status: 400,
-        },
+        { message: "Dữ liệu gửi lên không hợp lệ" },
+        { status: 400 },
       );
     }
 
@@ -127,10 +123,24 @@ export async function POST(req: Request, { params }: Props) {
         },
       );
     }
+    const MAX_REJECTION_REASON_LENGTH = 2000;
+
+    if (
+      reviewAction === "REJECT" &&
+      trimmedReason.length > MAX_REJECTION_REASON_LENGTH
+    ) {
+      return NextResponse.json(
+        {
+          message: "Lý do từ chối không được vượt quá 2000 ký tự",
+        },
+        { status: 400 },
+      );
+    }
 
     /*
      * 7. Kiểm tra tài liệu tồn tại
      */
+
     const existingDocument = await prisma.document.findUnique({
       where: {
         id,
@@ -139,6 +149,11 @@ export async function POST(req: Request, { params }: Props) {
       select: {
         id: true,
         status: true,
+        storagePath: true,
+        copyrightType: true,
+        copyrightDeclared: true,
+        sourceUrl: true,
+        permissionProofUrl: true,
       },
     });
 
@@ -162,6 +177,56 @@ export async function POST(req: Request, { params }: Props) {
           status: 409,
         },
       );
+    }
+
+    /*
+     * Kiểm tra điều kiện tối thiểu trước khi duyệt.
+     *
+     * Đây là kiểm tra tính đầy đủ của khai báo.
+     * Cán bộ vẫn phải xác minh bản quyền thực tế.
+     */
+    if (reviewAction === "APPROVE") {
+      if (!existingDocument.copyrightDeclared) {
+        return NextResponse.json(
+          {
+            message: "Tài liệu chưa có cam kết bản quyền của người tải lên.",
+          },
+          { status: 409 },
+        );
+      }
+
+      if (!existingDocument.storagePath) {
+        return NextResponse.json(
+          {
+            message: "Tài liệu chưa có đường dẫn PDF hợp lệ để kiểm duyệt.",
+          },
+          { status: 409 },
+        );
+      }
+
+      if (
+        existingDocument.copyrightType === "OPEN_SOURCE" &&
+        !existingDocument.sourceUrl?.trim()
+      ) {
+        return NextResponse.json(
+          {
+            message: "Tài liệu nguồn mở chưa có đường dẫn nguồn.",
+          },
+          { status: 409 },
+        );
+      }
+
+      if (
+        existingDocument.copyrightType === "AUTHOR_PERMISSION" &&
+        !existingDocument.permissionProofUrl?.trim()
+      ) {
+        return NextResponse.json(
+          {
+            message: "Tài liệu chưa có minh chứng cho phép của tác giả.",
+          },
+          { status: 409 },
+        );
+      }
     }
 
     /*
